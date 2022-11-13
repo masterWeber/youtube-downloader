@@ -26,6 +26,7 @@ import Light from '../components/icons/Light.vue';
 import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
 import StopFilled from '../components/icons/StopFilled.vue';
 import PauseFilled from '../components/icons/PauseFilled.vue';
+import {api} from '../api';
 
 const formInline = reactive({
   audio: 'best',
@@ -36,6 +37,7 @@ const formInline = reactive({
 
 const isDark = useDark()
 const toggleDark = useToggle(isDark)
+const showAbout = () => api.showAbout()
 
 interface Row {
   title: string;
@@ -94,7 +96,7 @@ function startDownload(row: Row) {
 
 const format = (percentage: number): string => `${percentage.toFixed(1)}%`
 
-function pauseDownload(row: Row) {
+function pauseDownload(row: Row): void {
   row.status = DownloadStatus.PAUSE;
 }
 </script>
@@ -156,14 +158,14 @@ function pauseDownload(row: Row) {
                   :enterable="false"
                   :hide-after="0"
               >
-                <el-button :icon="InfoFilled" circle/>
+                <el-button :icon="InfoFilled" circle @click="showAbout"/>
               </el-tooltip>
               <el-tooltip
                   content="Настройки"
                   :enterable="false"
                   :hide-after="0"
               >
-                <el-button :icon="Setting" circle @click="() => $router.push('/settings')"/>
+                <el-button :icon="Setting" circle @click="() => $router.push({name: 'settings'})"/>
               </el-tooltip>
             </el-row>
           </el-col>

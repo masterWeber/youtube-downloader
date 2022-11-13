@@ -15,15 +15,16 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0)
 }
 
-let win: BrowserWindow | null = null
+let mainWin: BrowserWindow | null = null
 const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST, 'index.html')
 
-async function createWindow() {
-  win = new BrowserWindow({
+async function createMainWindow() {
+  mainWin = new BrowserWindow({
     title: 'Youtube Downloader',
     icon: join(process.env.PUBLIC, 'icon.png'),
+    show: false,
     webPreferences: {
       preload,
       nodeIntegration: true,
@@ -35,38 +36,35 @@ async function createWindow() {
     minHeight: 450,
   })
 
-  win.setMenu(null)
+  mainWin.setMenu(null)
 
   if (app.isPackaged) {
-    win.loadFile(indexHtml)
+    mainWin.loadFile(indexHtml)
   } else {
-    win.loadURL(url)
-    //win.webContents.openDevTools()
+    mainWin.loadURL(url)
   }
 
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', new Date().toLocaleString())
-  })
-
   // Make all links open with the browser, not with the application
-  win.webContents.setWindowOpenHandler(({url}) => {
+  mainWin.webContents.setWindowOpenHandler(({url}) => {
     if (url.startsWith('https:')) shell.openExternal(url)
     return {action: 'deny'}
   })
+
+  mainWin.on('ready-to-show', () => mainWin.show())
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(createMainWindow)
 
 app.on('window-all-closed', () => {
-  win = null
+  mainWin = null
   if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('second-instance', () => {
-  if (win) {
+  if (mainWin) {
     // Focus on the main window if the user tried to open another
-    if (win.isMinimized()) win.restore()
-    win.focus()
+    if (mainWin.isMinimized()) mainWin.restore()
+    mainWin.focus()
   }
 })
 
@@ -75,7 +73,7 @@ app.on('activate', () => {
   if (allWindows.length) {
     allWindows[0].focus()
   } else {
-    createWindow()
+    createMainWindow()
   }
 })
 
@@ -97,16 +95,59 @@ ipcMain.handle('open-win', (event, arg) => {
 })
 
 ipcMain.handle('open-directory', async () => {
-  let dir = await dialog.showOpenDialog(win, {
+  let {canceled, filePaths} = await dialog.showOpenDialog(mainWin, {
     properties: ['openDirectory']
   })
 
   return {
-    canceled: dir.canceled,
-    path: dir.filePaths[0] ?? null
+    canceled,
+    path: filePaths[0] ?? null
   };
 });
 
 ipcMain.handle('get-path', (event, name) => {
   return app.getPath(name)
 });
+
+let aboutWin: BrowserWindow | null = null;
+
+async function createAboutWindows() {
+  if (aboutWin) return;
+
+  const modalPath = app.isPackaged
+      ? `file://${indexHtml}#about`
+      : `${url}#/about`
+
+  aboutWin = new BrowserWindow({
+    parent: mainWin,
+    title: 'О программе',
+    show: false,
+    modal: true,
+    movable: false,
+    width: 400,
+    height: 350,
+    resizable: false,
+    webPreferences: {
+      preload,
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  })
+
+  aboutWin.on('close', function () {
+    aboutWin = null
+  })
+
+  aboutWin.setMenu(null)
+  aboutWin.loadURL(modalPath)
+
+  // Make all links open with the browser, not with the application
+  aboutWin.webContents.setWindowOpenHandler(({url}) => {
+    if (url.startsWith('https:')) shell.openExternal(url)
+    return {action: 'deny'}
+  })
+
+  aboutWin.on('ready-to-show', () => aboutWin.show())
+}
+
+ipcMain.on('show-about', createAboutWindows)

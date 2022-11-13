@@ -2,30 +2,13 @@
 import {Back, Folder} from '@element-plus/icons-vue';
 import {ElCheckbox, ElContainer, ElHeader, ElInputNumber, ElMain, ElSpace} from 'element-plus';
 import {watch} from 'vue';
-import {useIpcRenderer} from '@vueuse/electron'
 import {useSettingsStore} from '../stores/settings';
+import {api} from '../api';
 
-const ipcRenderer = useIpcRenderer()
 const settingsStore = useSettingsStore()
 
-const setDefaultDownloadDirectory = () => {
-  const result = ipcRenderer.invoke<string | null>('get-path', 'downloads')
-  watch(result, (path) => {
-    if (path) {
-      settingsStore.downloadDirectory = path ?? ''
-    }
-  })
-}
-
-if (settingsStore.downloadDirectory === '') {
-  setDefaultDownloadDirectory()
-}
-
-const openDirectory = () => {
-  const result = ipcRenderer.invoke<{
-    canceled: boolean,
-    path: string | null
-  }>('open-directory')
+const openSelectDirDialog = () => {
+  const result = api.selectDirDialog()
 
   watch(result, (result) => {
     if (result?.canceled === false) {
@@ -48,7 +31,7 @@ const openDirectory = () => {
         <el-form-item label="Сохранить в папку">
           <el-input v-model="settingsStore.downloadDirectory">
             <template #append>
-              <el-button :icon="Folder" @click="openDirectory"/>
+              <el-button :icon="Folder" @click="openSelectDirDialog"/>
             </template>
           </el-input>
         </el-form-item>

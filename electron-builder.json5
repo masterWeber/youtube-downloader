@@ -1,9 +1,6 @@
-/**
- * @see https://www.electron.build/configuration/configuration
- */
 {
-  "appId": "YourAppID",
-  "asar": true,
+  "appId": "masterweber.youtube-downloader",
+  "asar": false,
   "directories": {
     "output": "release/${version}"
   },

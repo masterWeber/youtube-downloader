@@ -5,6 +5,7 @@ process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST_E
 import {app, BrowserWindow, dialog, ipcMain, shell} from 'electron'
 import {release} from 'os'
 import {join} from 'path'
+import youtubeDl from 'youtube-dl-exec'
 
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 
@@ -31,7 +32,7 @@ async function createMainWindow() {
       contextIsolation: false,
     },
     width: 800,
-    height: 550,
+    height: app.isPackaged ? 550 : 850,
     minWidth: 700,
     minHeight: 450,
   })
@@ -42,6 +43,7 @@ async function createMainWindow() {
     mainWin.loadFile(indexHtml)
   } else {
     mainWin.loadURL(url)
+    mainWin.webContents.openDevTools();
   }
 
   // Make all links open with the browser, not with the application
@@ -108,6 +110,45 @@ ipcMain.handle('open-directory', async () => {
 ipcMain.handle('get-path', (event, name) => {
   return app.getPath(name)
 });
+
+ipcMain.handle('get-video-info', async (event, url) => {
+  const result = await youtubeDl(url, {
+    dumpSingleJson: true,
+    noCheckCertificates: true,
+    noWarnings: true,
+  })
+
+  // @ts-ignore
+  const video = result.requested_formats[0];
+  // @ts-ignore
+  const audio = result.requested_formats[1];
+
+  return {
+    id: result.id,
+    title: result.title,
+    description: result.description,
+    thumbnail: result.thumbnail,
+    video: {
+      codec: video.vcodec,
+      fileSize: video.filesize,
+      formatNote: video.format_note,
+    },
+    audio: {
+      codec: audio.acodec,
+      fileSize: audio.filesize,
+      bitRate: audio.abr,
+    }
+  }
+});
+
+ipcMain.on('download-video', async (event, options) => {
+  const process = youtubeDl.exec(options.url, {
+    output: options.downloadDirectory + '/v'
+  })
+  process.stdout.addListener('data', (chunk) => {
+    mainWin.webContents.send('download-process', chunk.toString())
+  })
+})
 
 let aboutWin: BrowserWindow | null = null;
 

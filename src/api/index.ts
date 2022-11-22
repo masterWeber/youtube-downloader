@@ -1,12 +1,11 @@
 import {useIpcRenderer} from '@vueuse/electron';
 import {Ref} from 'vue';
+import {VideoInfo} from '../models/VideoInfo';
+import {DownloadOptions} from '../models/DownloadOptions';
+import {SelectDirResult} from '../models/SelectDirResult';
+import {useCatchableIpcRendererInvoke} from '../utils/useCatchableIpcRendererInvoke';
 
 const ipcRenderer = useIpcRenderer()
-
-interface SelectDirResult {
-  canceled: boolean,
-  path: string | null
-}
 
 export const api = {
   showAbout(): void {
@@ -17,5 +16,11 @@ export const api = {
   },
   getPath(name: string): Ref<string | null> {
     return ipcRenderer.invoke<string | null>('get-path', name)
+  },
+  getVideoInfo(url: string, handleErrors: (reason: any) => void): Ref<VideoInfo | null> {
+    return useCatchableIpcRendererInvoke<VideoInfo | null>('get-video-info', handleErrors, url);
+  },
+  downloadVideo(options: DownloadOptions): void {
+    ipcRenderer.send('download-video', options);
   }
 }

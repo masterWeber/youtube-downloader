@@ -3,53 +3,96 @@ import {
   ElButton,
   ElButtonGroup,
   ElCol,
+  ElCollapseTransition,
   ElContainer,
-  ElDescriptions,
-  ElDescriptionsItem,
   ElForm,
   ElFormItem,
   ElIcon,
   ElInput,
   ElMain,
+  ElMessage,
   ElOption,
   ElProgress,
   ElRow,
   ElSelect,
   ElTable,
-  ElTooltip
+  ElTooltip,
+  FormInstance
 } from 'element-plus';
-import {reactive, watch} from 'vue'
-import {Download, InfoFilled, Setting, SuccessFilled} from '@element-plus/icons-vue';
-import {useDark, useToggle} from '@vueuse/core';
+import {reactive, ref, watch} from 'vue'
+import {Download, InfoFilled, Loading, Setting, SuccessFilled} from '@element-plus/icons-vue';
+import {useDark, useDebounceFn, useToggle} from '@vueuse/core';
 import Dark from '../components/icons/Dark.vue';
 import Light from '../components/icons/Light.vue';
 import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
 import StopFilled from '../components/icons/StopFilled.vue';
 import PauseFilled from '../components/icons/PauseFilled.vue';
 import {api} from '../api';
+import {useIpcRenderer} from '@vueuse/electron';
+import {useSettingsStore} from '../stores/settings';
+import {VideoInfo} from '../models/VideoInfo';
+import {DownloadStatus} from '../models/DownloadStatus';
+import VideoInfoCard from '../components/VideoInfoCard.vue';
 
-const formInline = reactive({
-  audio: 'best',
+const formRef = ref<FormInstance>()
+
+const form = reactive({
+  preferredAudio: 'best',
   preferredVideo: 'best',
-  quality: 'max',
-  url: 'https://www.youtube.com/watch?v=TfNMBlrN3Bg',
+  preferredQuality: 'max',
+  url: '',
 })
+
+const videoInfo = ref<VideoInfo | null>(null)
+const loadingVideoInfo = ref<boolean>(false)
+const invalidYoutubeUrl = ref<boolean>(true)
+
+const urlInputHandler = async (url: string) => {
+  if (!formRef.value) return
+  const formEl = formRef.value;
+
+  try {
+    invalidYoutubeUrl.value = true
+    await formEl.validate()
+  } catch (exception) {
+    return
+  }
+
+  if (url.trim().length === 0) return
+
+  videoInfo.value = null
+  loadingVideoInfo.value = true
+  const result = api.getVideoInfo(url, (reason: any): void => {
+    loadingVideoInfo.value = false
+    invalidYoutubeUrl.value = true
+
+    console.log(reason.message)
+
+    ElMessage({
+      message: 'Не удалось найти видео, проверьте URL.',
+      type: 'error',
+    })
+  })
+  watch(result, (result) => {
+    if (null !== result) {
+      invalidYoutubeUrl.value = false
+      loadingVideoInfo.value = false
+      videoInfo.value = result;
+    }
+  })
+}
+
+watch(() => form.url, useDebounceFn(urlInputHandler, 500))
 
 const isDark = useDark()
 const toggleDark = useToggle(isDark)
 const showAbout = () => api.showAbout()
+const settingsStore = useSettingsStore()
 
 interface Row {
   title: string;
   progress: number;
   status: DownloadStatus;
-}
-
-enum DownloadStatus {
-  PAUSE,
-  DOWNLOAD,
-  DOWNLOADED,
-  STOPPED,
 }
 
 const tableData = reactive<Row[]>([
@@ -73,19 +116,6 @@ function stop(row: Row) {
 function startDownload(row: Row) {
   row.status = DownloadStatus.DOWNLOAD;
 
-  const intervalId = setInterval(() => {
-    if (row.progress < 100) {
-      row.progress += 0.1
-    }
-  }, 100)
-
-  watch(
-      () => row.status,
-      value => {
-        if (value !== DownloadStatus.DOWNLOAD) clearInterval(intervalId)
-      }
-  )
-
   watch(
       () => row.progress,
       value => {
@@ -93,6 +123,11 @@ function startDownload(row: Row) {
       }
   )
 }
+
+const ipcRenderer = useIpcRenderer()
+ipcRenderer.on('download-process', (event, line) => {
+  console.log(line)
+})
 
 const format = (percentage: number): string => `${percentage.toFixed(1)}%`
 
@@ -104,11 +139,11 @@ function pauseDownload(row: Row): void {
 <template>
   <el-container class="common-layout is-vertical">
     <el-main>
-      <el-form>
+      <el-form :model="form" ref="formRef">
         <el-row :gutter="20">
           <el-col :span="6">
             <el-form-item label="Видео">
-              <el-select v-model="formInline.preferredVideo" :default-first-option="true">
+              <el-select v-model="form.preferredVideo" :default-first-option="true">
                 <el-option label="Лучшее" value="best"/>
                 <el-option label="MP4" value="mp4"/>
                 <el-option label="WebM" value="webm"/>
@@ -118,7 +153,7 @@ function pauseDownload(row: Row): void {
           </el-col>
           <el-col :span="6">
             <el-form-item label="Аудио">
-              <el-select v-model="formInline.audio" :default-first-option="true">
+              <el-select v-model="form.preferredAudio" :default-first-option="true">
                 <el-option label="Лучшее" value="best"/>
                 <el-option label="MP4" value="mp4"/>
                 <el-option label="WebM" value="webm"/>
@@ -128,7 +163,7 @@ function pauseDownload(row: Row): void {
           </el-col>
           <el-col :span="6">
             <el-form-item label="Качество">
-              <el-select v-model="formInline.quality" :default-first-option="true">
+              <el-select v-model="form.preferredQuality" :default-first-option="true">
                 <el-option label="Макс." value="max"/>
                 <el-option label="4320p" value="4320p"/>
                 <el-option label="3072p" value="3072p"/>
@@ -151,93 +186,133 @@ function pauseDownload(row: Row): void {
                   :enterable="false"
                   :hide-after="0"
               >
-                <el-button :icon="isDark ? Dark : Light" circle @click="toggleDark()"/>
+                <el-button
+                    :icon="isDark ? Dark : Light"
+                    circle
+                    @click="toggleDark()"
+                />
               </el-tooltip>
               <el-tooltip
                   content="О программе"
                   :enterable="false"
                   :hide-after="0"
               >
-                <el-button :icon="InfoFilled" circle @click="showAbout"/>
+                <el-button
+                    :icon="InfoFilled"
+                    circle
+                    @click="showAbout"
+                />
               </el-tooltip>
               <el-tooltip
                   content="Настройки"
                   :enterable="false"
                   :hide-after="0"
               >
-                <el-button :icon="Setting" circle @click="() => $router.push({name: 'settings'})"/>
+                <el-button
+                    :icon="Setting"
+                    circle
+                    @click="() => $router.push({name: 'settings'})"
+                />
               </el-tooltip>
             </el-row>
           </el-col>
         </el-row>
-        <el-form-item label="URL для скачивания">
-          <el-input v-model="formInline.url"/>
+        <el-form-item
+            label="URL для скачивания"
+            prop="url"
+            :rules="[{
+              type: 'string',
+              trigger: 'blur',
+              pattern: /^(https?:\/\/)?((www\.)?youtube\.com|youtu\.be)\/.+$/,
+              message: 'Недопустимый URL',
+            }]"
+        >
+          <el-input v-model="form.url" spellcheck="false">
+            <template #suffix>
+              <transition name="el-fade-in">
+                <el-icon v-if="loadingVideoInfo">
+                  <Loading class="video-info-loading-spinner"/>
+                </el-icon>
+              </transition>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+              type="primary"
+              style="margin-left: auto;"
+              :icon="Download"
+              @click="() => api.downloadVideo({
+              url: form.url,
+              downloadDirectory: settingsStore.downloadDirectory
+            })"
+              :disabled="invalidYoutubeUrl"
+          >
+            Загрузить
+          </el-button>
         </el-form-item>
       </el-form>
 
-      <el-row :gutter="5" justify="end">
-        <el-button type="primary" :icon="Download" @click="() => tableData.push(tableData[0])">Загрузить</el-button>
-      </el-row>
+      <VideoInfoCard :data="videoInfo"/>
 
-      <el-descriptions
-          title="Информация о видео"
-          direction="horizontal"
-          :column="1"
-          border
-      >
-        <el-descriptions-item label="Название">Как фильмы 2000–2010-х отражали реальность и что ждет наш
-          кинематограф
-        </el-descriptions-item>
-        <el-descriptions-item label="Видео">vp9 - 1080p (443.1мб)</el-descriptions-item>
-        <el-descriptions-item label="Аудио">opus - 128кбит/с (44.8мб)</el-descriptions-item>
-      </el-descriptions>
-      <el-table :data="tableData" :show-header="false" scrollbar-always-on>
-        <el-table-column prop="title" :min-width="60"/>
-        <el-table-column :min-width="20" align="center">
-          <template #default="scope">
-            <transition name="el-fade-in">
-              <el-progress
-                  v-show="scope.row.status !== DownloadStatus.STOPPED && scope.row.status !== DownloadStatus.DOWNLOADED"
-                  :text-inside="true"
-                  :stroke-width="26"
-                  :format="format"
-                  :percentage="scope.row.progress"
-                  :status="scope.row.status === DownloadStatus.PAUSE ? 'warning' : ''"
-              />
-            </transition>
-          </template>
-        </el-table-column>
-        <el-table-column :min-width="20" align="right">
-          <template #default="scope">
-            <el-button-group v-if="scope.row.status !== DownloadStatus.DOWNLOADED">
-              <el-button
-                  :icon="scope.row.status !== DownloadStatus.DOWNLOAD ? PlayArrowFilled : PauseFilled"
-                  @click="() => {
+      <el-collapse-transition>
+        <el-table :data="tableData" :show-header="false" scrollbar-always-on v-if="tableData.length > 0">
+          <el-table-column prop="title" :min-width="60"/>
+          <el-table-column :min-width="20" align="center">
+            <template #default="scope">
+              <transition name="el-fade-in">
+                <el-progress
+                    v-show="scope.row.status !== DownloadStatus.STOPPED && scope.row.status !== DownloadStatus.DOWNLOADED"
+                    :text-inside="true"
+                    :stroke-width="26"
+                    :format="format"
+                    :percentage="scope.row.progress"
+                    :status="scope.row.status === DownloadStatus.PAUSE ? 'warning' : ''"
+                />
+              </transition>
+            </template>
+          </el-table-column>
+          <el-table-column :min-width="20" align="right">
+            <template #default="scope">
+              <el-button-group v-if="scope.row.status !== DownloadStatus.DOWNLOADED">
+                <el-button
+                    :icon="scope.row.status !== DownloadStatus.DOWNLOAD ? PlayArrowFilled : PauseFilled"
+                    @click="() => {
                     if (scope.row.status !== DownloadStatus.DOWNLOAD) {
                       startDownload(scope.row)
                     } else {
                       pauseDownload(scope.row)
                     }
                   }"
-                  plain round
+                    plain round
+                >
+                </el-button>
+                <el-button
+                    type="danger"
+                    :icon="StopFilled"
+                    @click="stop(scope.row)"
+                    plain round/>
+              </el-button-group>
+              <el-icon
+                  v-else
+                  :size="24"
+                  color="var(--el-color-success)"
               >
-              </el-button>
-              <el-button
-                  type="danger"
-                  :icon="StopFilled"
-                  @click="stop(scope.row)"
-                  plain round/>
-            </el-button-group>
-            <el-icon
-                v-else
-                :size="24"
-                color="var(--el-color-success)"
-            >
-              <SuccessFilled/>
-            </el-icon>
-          </template>
-        </el-table-column>
-      </el-table>
+                <SuccessFilled/>
+              </el-icon>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-collapse-transition>
     </el-main>
   </el-container>
 </template>
+
+<style scoped>
+.video-info-loading-spinner {
+  color: var(--el-color-primary);
+  animation-name: rotating;
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+}
+</style>

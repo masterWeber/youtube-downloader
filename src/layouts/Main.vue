@@ -112,6 +112,11 @@
               :icon="Download"
               @click="() => api.downloadVideo({
               url: mainStore.url,
+              preferred: {
+                video: mainStore.preferred.video,
+                audio: mainStore.preferred.audio,
+              },
+              maxQuality: mainStore.maxQuality,
               output: settingsStore.downloadDirectory
             })"
               :disabled="invalidYoutubeUrl"

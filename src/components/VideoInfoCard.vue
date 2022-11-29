@@ -1,40 +1,42 @@
 <template>
-  <el-collapse-transition>
-    <el-card
-        class="video-info-card"
-        v-if="videoInfo !== null"
-        shadow="never"
-    >
-      <el-image
-          class="video-info-card__thumbnail"
-          :src="videoInfo.thumbnail"
-          v-loading="imgLoading"
-          @load="imgLoading = false"
-          @error="imgLoading = false"
-          fit="cover"
+  <div class="video-info-card-container">
+    <el-collapse-transition>
+      <el-card
+          class="video-info-card"
+          v-if="videoInfo !== null"
+          shadow="never"
       >
-        <template #placeholder>
-          <div class="video-info-card__placeholder">
-            <el-icon>
-              <PictureFilled/>
-            </el-icon>
-          </div>
-        </template>
-        <template #error>
-          <div class="video-info-card__placeholder">
-            <el-icon>
-              <PictureFilled/>
-            </el-icon>
-          </div>
-        </template>
-      </el-image>
-      <div class="video-info-card__description">
-        <h5 class="video-info-card__title">{{ title }}</h5>
-        <p class="video-info-card__item">Видео: {{ video }}</p>
-        <p class="video-info-card__item">Аудио: {{ audio }}</p>
-      </div>
-    </el-card>
-  </el-collapse-transition>
+        <el-image
+            class="video-info-card__thumbnail"
+            :src="videoInfo.thumbnail"
+            v-loading="imgLoading"
+            @load="imgLoading = false"
+            @error="imgLoading = false"
+            fit="cover"
+        >
+          <template #placeholder>
+            <div class="video-info-card__placeholder">
+              <el-icon>
+                <PictureFilled/>
+              </el-icon>
+            </div>
+          </template>
+          <template #error>
+            <div class="video-info-card__placeholder">
+              <el-icon>
+                <PictureFilled/>
+              </el-icon>
+            </div>
+          </template>
+        </el-image>
+        <div class="video-info-card__description">
+          <h5 class="video-info-card__title">{{ videoTitle }}</h5>
+          <p class="video-info-card__item" v-if="videoStreamInfo">Видео: {{ videoStreamInfo }}</p>
+          <p class="video-info-card__item" v-if="audioStreamInfo">Аудио: {{ audioStreamInfo }}</p>
+        </div>
+      </el-card>
+    </el-collapse-transition>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -48,33 +50,33 @@ const props = defineProps<{
   data: VideoInfo | null
 }>()
 
-const videoInfo = computed(() => props.data)
+const videoInfo = computed<VideoInfo | null>(() => props.data)
 
-const imgLoading = ref(true)
+const imgLoading = ref<boolean>(true)
 watch(() => props.data, (value) => {
   if (value === null) {
     imgLoading.value = true
   }
 })
 
-const title = computed(() => videoInfo.value?.title)
+const videoTitle = computed(() => videoInfo.value?.title)
 
-const video = computed(() => {
-  const video = videoInfo.value?.video;
+const videoStreamInfo = computed<string | null>(() => {
+  const video = videoInfo.value?.streamInfo.video;
   if (video) {
     return `${video.codec} - ${video.formatNote} (${bit2mb(video.fileSize)} мб)`
   }
 
-  return '';
+  return null;
 })
 
-const audio = computed(() => {
-  const audio = videoInfo.value?.audio;
+const audioStreamInfo = computed<string | null>(() => {
+  const audio = videoInfo.value?.streamInfo.audio;
   if (audio) {
     return `${audio.codec} - ${Math.round(audio.bitRate)}кбит/с (${bit2mb(audio.fileSize)} мб)`
   }
 
-  return '';
+  return null;
 })
 </script>
 
@@ -83,15 +85,15 @@ const audio = computed(() => {
   --min-height: 120px;
 }
 
-.video-info-card {
+.video-info-card-container {
   margin-bottom: 18px;
-  min-height: var(--min-height);
 }
 
 .video-info-card :deep(.el-card__body) {
   display: flex;
   flex-direction: row;
   padding: 0;
+  min-height: var(--min-height);
 }
 
 .video-info-card__thumbnail {

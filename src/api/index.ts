@@ -17,8 +17,8 @@ export const api = {
   getPath(name: string): Ref<string | null> {
     return ipcRenderer.invoke<string | null>('get-path', name)
   },
-  getVideoInfo(url: string, handleErrors: (reason: any) => void): Ref<VideoInfo | null> {
-    return useCatchableIpcRendererInvoke<VideoInfo | null>('get-video-info', handleErrors, url);
+  getVideoInfo(downloadOptions: DownloadOptions, handleErrors: (reason: any) => void): Ref<VideoInfo | null> {
+    return useCatchableIpcRendererInvoke<VideoInfo | null>('get-video-info', handleErrors, downloadOptions);
   },
   downloadVideo(options: DownloadOptions): void {
     ipcRenderer.send('download-video', options);

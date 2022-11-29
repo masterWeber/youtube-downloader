@@ -3,14 +3,16 @@ export interface VideoInfo {
   title: string,
   description: string,
   thumbnail: string,
-  video: {
-    codec: string,
-    fileSize: number,
-    formatNote: string,
-  },
-  audio: {
-    codec: string,
-    fileSize: number,
-    bitRate: number,
+  streamInfo: {
+    video: {
+      codec: string,
+      fileSize: number,
+      formatNote: string,
+    },
+    audio: {
+      codec: string,
+      fileSize: number,
+      bitRate: number,
+    }
   }
 }

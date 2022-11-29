@@ -1,3 +1,5 @@
+import {StreamSelector} from './StreamSelector';
+
 process.env.DIST_ELECTRON = join(__dirname, '..')
 process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST_ELECTRON, '../public')
@@ -6,6 +8,8 @@ import {app, BrowserWindow, dialog, ipcMain, shell} from 'electron'
 import {release} from 'os'
 import {join} from 'path'
 import youtubeDl from 'youtube-dl-exec'
+import {Info} from './Info';
+import {DownloadOptions} from './DownloadOptions';
 
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 
@@ -111,34 +115,23 @@ ipcMain.handle('get-path', (event, name) => {
   return app.getPath(name)
 });
 
-ipcMain.handle('get-video-info', async (event, url) => {
-  const result = await youtubeDl(url, {
+ipcMain.handle('get-video-info', async (event, options: DownloadOptions) => {
+  const result = await youtubeDl(options.url, {
     dumpSingleJson: true,
     noCheckCertificates: true,
     noWarnings: true,
   })
 
-  // @ts-ignore
-  const video = result.requested_formats[0];
-  // @ts-ignore
-  const audio = result.requested_formats[1];
+  const formatSelector = new StreamSelector()
+  const muxedStreamInfo = formatSelector.selectFormat(result.formats, options)
 
-  return {
-    id: result.id,
-    title: result.title,
-    description: result.description,
-    thumbnail: result.thumbnail,
-    video: {
-      codec: video.vcodec,
-      fileSize: video.filesize,
-      formatNote: video.format_note,
-    },
-    audio: {
-      codec: audio.acodec,
-      fileSize: audio.filesize,
-      bitRate: audio.abr,
-    }
-  }
+  return new Info(
+      result.id,
+      result.title,
+      result.description,
+      result.thumbnail,
+      muxedStreamInfo
+  )
 });
 
 ipcMain.on('download-video', async (event, options) => {
@@ -150,7 +143,7 @@ ipcMain.on('download-video', async (event, options) => {
   })
 })
 
-let aboutWin: BrowserWindow | null = null;
+let aboutWin: BrowserWindow | null = null
 
 async function createAboutWindows() {
   if (aboutWin) return;

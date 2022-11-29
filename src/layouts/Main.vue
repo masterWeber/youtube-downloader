@@ -1,181 +1,49 @@
-<script setup lang="ts">
-import {
-  ElButton,
-  ElButtonGroup,
-  ElCol,
-  ElCollapseTransition,
-  ElContainer,
-  ElForm,
-  ElFormItem,
-  ElIcon,
-  ElInput,
-  ElMain,
-  ElMessage,
-  ElOption,
-  ElProgress,
-  ElRow,
-  ElSelect,
-  ElTable,
-  ElTooltip,
-  FormInstance
-} from 'element-plus';
-import {reactive, ref, watch} from 'vue'
-import {Download, InfoFilled, Loading, Setting, SuccessFilled} from '@element-plus/icons-vue';
-import {useDark, useDebounceFn, useToggle} from '@vueuse/core';
-import Dark from '../components/icons/Dark.vue';
-import Light from '../components/icons/Light.vue';
-import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
-import StopFilled from '../components/icons/StopFilled.vue';
-import PauseFilled from '../components/icons/PauseFilled.vue';
-import {api} from '../api';
-import {useIpcRenderer} from '@vueuse/electron';
-import {useSettingsStore} from '../stores/settings';
-import {VideoInfo} from '../models/VideoInfo';
-import {DownloadStatus} from '../models/DownloadStatus';
-import VideoInfoCard from '../components/VideoInfoCard.vue';
-
-const formRef = ref<FormInstance>()
-
-const form = reactive({
-  preferredAudio: 'best',
-  preferredVideo: 'best',
-  preferredQuality: 'max',
-  url: '',
-})
-
-const videoInfo = ref<VideoInfo | null>(null)
-const loadingVideoInfo = ref<boolean>(false)
-const invalidYoutubeUrl = ref<boolean>(true)
-
-const urlInputHandler = async (url: string) => {
-  if (!formRef.value) return
-  const formEl = formRef.value;
-
-  try {
-    invalidYoutubeUrl.value = true
-    await formEl.validate()
-  } catch (exception) {
-    return
-  }
-
-  if (url.trim().length === 0) return
-
-  videoInfo.value = null
-  loadingVideoInfo.value = true
-  const result = api.getVideoInfo(url, (reason: any): void => {
-    loadingVideoInfo.value = false
-    invalidYoutubeUrl.value = true
-
-    console.log(reason.message)
-
-    ElMessage({
-      message: 'Не удалось найти видео, проверьте URL.',
-      type: 'error',
-    })
-  })
-  watch(result, (result) => {
-    if (null !== result) {
-      invalidYoutubeUrl.value = false
-      loadingVideoInfo.value = false
-      videoInfo.value = result;
-    }
-  })
-}
-
-watch(() => form.url, useDebounceFn(urlInputHandler, 500))
-
-const isDark = useDark()
-const toggleDark = useToggle(isDark)
-const showAbout = () => api.showAbout()
-const settingsStore = useSettingsStore()
-
-interface Row {
-  title: string;
-  progress: number;
-  status: DownloadStatus;
-}
-
-const tableData = reactive<Row[]>([
-  {
-    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
-    progress: 26,
-    status: DownloadStatus.PAUSE,
-  },
-  {
-    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
-    progress: 99,
-    status: DownloadStatus.PAUSE,
-  },
-]);
-
-function stop(row: Row) {
-  row.status = DownloadStatus.STOPPED;
-  row.progress = 0
-}
-
-function startDownload(row: Row) {
-  row.status = DownloadStatus.DOWNLOAD;
-
-  watch(
-      () => row.progress,
-      value => {
-        if (value >= 100) row.status = DownloadStatus.DOWNLOADED
-      }
-  )
-}
-
-const ipcRenderer = useIpcRenderer()
-ipcRenderer.on('download-process', (event, line) => {
-  console.log(line)
-})
-
-const format = (percentage: number): string => `${percentage.toFixed(1)}%`
-
-function pauseDownload(row: Row): void {
-  row.status = DownloadStatus.PAUSE;
-}
-</script>
-
 <template>
   <el-container class="common-layout is-vertical">
     <el-main>
-      <el-form :model="form" ref="formRef">
+      <el-form :model="mainStore" ref="formRef">
         <el-row :gutter="20">
           <el-col :span="6">
             <el-form-item label="Видео">
-              <el-select v-model="form.preferredVideo" :default-first-option="true">
-                <el-option label="Лучшее" value="best"/>
-                <el-option label="MP4" value="mp4"/>
-                <el-option label="WebM" value="webm"/>
-                <el-option label="Неважно" value="none"/>
+              <el-select
+                  v-model="mainStore.preferred.video"
+                  :default-first-option="true"
+              >
+                <el-option
+                    v-for="item in preferredVideoOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="Аудио">
-              <el-select v-model="form.preferredAudio" :default-first-option="true">
-                <el-option label="Лучшее" value="best"/>
-                <el-option label="MP4" value="mp4"/>
-                <el-option label="WebM" value="webm"/>
-                <el-option label="Неважно" value="none"/>
+              <el-select
+                  v-model="mainStore.preferred.audio"
+                  :default-first-option="true">
+                <el-option
+                    v-for="item in preferredAudioOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="Качество">
-              <el-select v-model="form.preferredQuality" :default-first-option="true">
-                <el-option label="Макс." value="max"/>
-                <el-option label="4320p" value="4320p"/>
-                <el-option label="3072p" value="3072p"/>
-                <el-option label="2160p" value="2160p"/>
-                <el-option label="1440p" value="1440p"/>
-                <el-option label="1080p" value="1080p"/>
-                <el-option label="720p" value="720p"/>
-                <el-option label="480p" value="480p"/>
-                <el-option label="360p" value="360p"/>
-                <el-option label="240p" value="240p"/>
-                <el-option label="144p" value="144p"/>
-                <el-option label="Неважно" value="none"/>
+              <el-select
+                  v-model="mainStore.maxQuality"
+                  :default-first-option="true"
+              >
+                <el-option
+                    v-for="item in preferredQualityOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
@@ -227,7 +95,7 @@ function pauseDownload(row: Row): void {
               message: 'Недопустимый URL',
             }]"
         >
-          <el-input v-model="form.url" spellcheck="false">
+          <el-input v-model="mainStore.url" spellcheck="false">
             <template #suffix>
               <transition name="el-fade-in">
                 <el-icon v-if="loadingVideoInfo">
@@ -243,8 +111,8 @@ function pauseDownload(row: Row): void {
               style="margin-left: auto;"
               :icon="Download"
               @click="() => api.downloadVideo({
-              url: form.url,
-              downloadDirectory: settingsStore.downloadDirectory
+              url: mainStore.url,
+              output: settingsStore.downloadDirectory
             })"
               :disabled="invalidYoutubeUrl"
           >
@@ -253,7 +121,7 @@ function pauseDownload(row: Row): void {
         </el-form-item>
       </el-form>
 
-      <VideoInfoCard :data="videoInfo"/>
+      <VideoInfoCard :data="mainStore.videoInfo"/>
 
       <el-collapse-transition>
         <el-table :data="tableData" :show-header="false" scrollbar-always-on v-if="tableData.length > 0">
@@ -307,6 +175,227 @@ function pauseDownload(row: Row): void {
     </el-main>
   </el-container>
 </template>
+
+<script setup lang="ts">
+import {
+  ElButton,
+  ElButtonGroup,
+  ElCol,
+  ElCollapseTransition,
+  ElContainer,
+  ElForm,
+  ElFormItem,
+  ElIcon,
+  ElInput,
+  ElMain,
+  ElMessage,
+  ElOption,
+  ElProgress,
+  ElRow,
+  ElSelect,
+  ElTable,
+  ElTooltip,
+  FormInstance
+} from 'element-plus';
+import {reactive, ref, watch} from 'vue'
+import {Download, InfoFilled, Loading, Setting, SuccessFilled} from '@element-plus/icons-vue';
+import {useDark, useDebounceFn, useToggle} from '@vueuse/core';
+import Dark from '../components/icons/Dark.vue';
+import Light from '../components/icons/Light.vue';
+import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
+import StopFilled from '../components/icons/StopFilled.vue';
+import PauseFilled from '../components/icons/PauseFilled.vue';
+import {api} from '../api';
+import {useIpcRenderer} from '@vueuse/electron';
+import {useSettingsStore} from '../stores/settings';
+import {DownloadStatus} from '../models/DownloadStatus';
+import VideoInfoCard from '../components/VideoInfoCard.vue';
+import {useMainStore} from '../stores/main';
+import {VideoOption} from '../models/VideoOption';
+import {AudioOption} from '../models/AudioOption';
+import {QualityOption} from '../models/QualityOption';
+
+const mainStore = useMainStore();
+
+const formRef = ref<FormInstance>()
+
+const loadingVideoInfo = ref<boolean>(false)
+const invalidYoutubeUrl = ref<boolean>(true)
+
+const urlInputHandler = async (url: string) => {
+  if (!formRef.value) return
+  const formEl = formRef.value;
+
+  try {
+    invalidYoutubeUrl.value = true
+    await formEl.validate()
+  } catch (exception) {
+    return
+  }
+
+  if (url.trim().length === 0) return
+
+  mainStore.videoInfo = null
+  loadingVideoInfo.value = true
+  const options = {
+    url,
+    preferred: {
+      video: mainStore.preferred.video,
+      audio: mainStore.preferred.audio,
+    },
+    maxQuality: mainStore.maxQuality,
+  }
+
+  const result = api.getVideoInfo(options,
+      (reason: any): void => {
+        loadingVideoInfo.value = false
+        invalidYoutubeUrl.value = true
+
+        console.log(reason.message)
+
+        ElMessage({
+          message: 'Не удалось найти видео, проверьте URL.',
+          type: 'error',
+        })
+      })
+  watch(result, (result) => {
+    if (null !== result) {
+      invalidYoutubeUrl.value = false
+      loadingVideoInfo.value = false
+      mainStore.videoInfo = result;
+    }
+  })
+}
+
+watch(() => mainStore.url, useDebounceFn(urlInputHandler, 500))
+
+watch(() => [mainStore.preferred, mainStore.maxQuality], () => {
+  if (mainStore.videoInfo !== null)
+    urlInputHandler(mainStore.url)
+}, {deep: true})
+
+const isDark = useDark()
+const toggleDark = useToggle(isDark)
+const showAbout = () => api.showAbout()
+const settingsStore = useSettingsStore()
+
+const preferredVideoOptions = [
+  {
+    label: 'Лучшее',
+    value: VideoOption.BEST,
+  },
+  {
+    label: 'MP4',
+    value: VideoOption.MP4,
+  },
+  {
+    label: 'WebM',
+    value: VideoOption.WEBM,
+  },
+];
+const preferredAudioOptions = [
+  {
+    label: 'Лучшее',
+    value: AudioOption.BEST,
+  },
+  {
+    label: 'MP4',
+    value: AudioOption.MP4,
+  },
+  {
+    label: 'WebM',
+    value: AudioOption.WEBM,
+  },
+];
+const preferredQualityOptions = [
+  {
+    label: 'Макс.',
+    value: QualityOption.MAX,
+  },
+  {
+    label: '4320p',
+    value: QualityOption['8K'],
+  },
+  {
+    label: '2160p',
+    value: QualityOption.UHD,
+  },
+  {
+    label: '1440p',
+    value: QualityOption.QHD,
+  },
+  {
+    label: '1080p',
+    value: QualityOption.FHD,
+  },
+  {
+    label: '720p',
+    value: QualityOption.HD,
+  },
+  {
+    label: '480p',
+    value: QualityOption['480P'],
+  },
+  {
+    label: '360p',
+    value: QualityOption['360P'],
+  },
+  {
+    label: '240p',
+    value: QualityOption['240P'],
+  },
+  {
+    label: '144p',
+    value: QualityOption['144P'],
+  },
+];
+
+interface Row {
+  title: string;
+  progress: number;
+  status: DownloadStatus;
+}
+
+const tableData = reactive<Row[]>([
+  {
+    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
+    progress: 26,
+    status: DownloadStatus.PAUSE,
+  },
+  {
+    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
+    progress: 99,
+    status: DownloadStatus.PAUSE,
+  },
+]);
+
+function stop(row: Row) {
+  row.status = DownloadStatus.STOPPED;
+  row.progress = 0
+}
+
+function startDownload(row: Row) {
+  row.status = DownloadStatus.DOWNLOAD;
+
+  watch(
+      () => row.progress,
+      value => {
+        if (value >= 100) row.status = DownloadStatus.DOWNLOADED
+      }
+  )
+}
+
+const ipcRenderer = useIpcRenderer()
+ipcRenderer.on('download-process', (event, line) => {
+  console.log(line)
+})
+
+const format = (percentage: number): string => `${percentage.toFixed(1)}%`
+
+function pauseDownload(row: Row): void {
+  row.status = DownloadStatus.PAUSE;
+}
+</script>
 
 <style scoped>
 .video-info-loading-spinner {

@@ -2,7 +2,7 @@
   <el-container class="common-layout is-vertical">
     <el-main>
       <el-form :model="mainStore" ref="formRef">
-        <ToolBar />
+        <ToolBar/>
         <el-form-item
             label="URL для скачивания"
             prop="url"
@@ -28,15 +28,7 @@
               type="primary"
               style="margin-left: auto;"
               :icon="Download"
-              @click="() => api.downloadVideo({
-              url: mainStore.url,
-              preferred: {
-                video: mainStore.preferred.video,
-                audio: mainStore.preferred.audio,
-              },
-              maxQuality: mainStore.maxQuality,
-              output: settingsStore.downloadDirectory
-            })"
+              @click="addTask(mainStore.videoInfo)"
               :disabled="invalidYoutubeUrl"
           >
             Загрузить
@@ -46,43 +38,47 @@
 
       <VideoInfoCard :data="mainStore.videoInfo"/>
 
-      <el-collapse-transition>
-        <el-table :data="tableData" :show-header="false" scrollbar-always-on v-if="tableData.length > 0">
-          <el-table-column prop="title" :min-width="60"/>
+      <transition name="el-fade-in">
+        <el-table :data="tasks" :show-header="false" scrollbar-always-on v-if="tasks.length > 0">
+          <el-table-column :min-width="50">
+            <template #default="{row: task, column, $index}">
+              <ScrollableString :value="task.videoInfo.title"/>
+            </template>
+          </el-table-column>
           <el-table-column :min-width="20" align="center">
-            <template #default="scope">
+            <template #default="{row: task, column, $index}">
               <transition name="el-fade-in">
                 <el-progress
-                    v-show="scope.row.status !== DownloadStatus.STOPPED && scope.row.status !== DownloadStatus.DOWNLOADED"
+                    v-if="task.id && !task.isStopped() && !task.isDownloaded()"
                     :text-inside="true"
                     :stroke-width="26"
                     :format="format"
-                    :percentage="scope.row.progress"
-                    :status="scope.row.status === DownloadStatus.PAUSE ? 'warning' : ''"
+                    :percentage="task.progress"
+                    :status="task.isPaused() ? 'warning' : ''"
                 />
               </transition>
             </template>
           </el-table-column>
-          <el-table-column :min-width="20" align="right">
-            <template #default="scope">
-              <el-button-group v-if="scope.row.status !== DownloadStatus.DOWNLOADED">
+          <el-table-column :width="120" align="right">
+            <template #default="{row: task, column, $index}">
+              <el-button-group v-if="!task.isDownloaded()">
                 <el-button
-                    :icon="scope.row.status !== DownloadStatus.DOWNLOAD ? PlayArrowFilled : PauseFilled"
+                    :icon="task.isDownload() ? PauseFilled : PlayArrowFilled"
                     @click="() => {
-                    if (scope.row.status !== DownloadStatus.DOWNLOAD) {
-                      startDownload(scope.row)
+                    if (task.isDownload()) {
+                      task.pause()
                     } else {
-                      pauseDownload(scope.row)
+                      task.start()
                     }
                   }"
-                    plain round :circle="scope.row.status === DownloadStatus.STOPPED"
+                    plain round :circle="task.isStopped()"
                 >
                 </el-button>
                 <el-button
-                    v-if="scope.row.status !== DownloadStatus.STOPPED"
+                    v-if="!task.isStopped()"
                     type="danger"
                     :icon="StopFilled"
-                    @click="stop(scope.row)"
+                    @click="task.stop()"
                     plain round/>
               </el-button-group>
               <el-icon
@@ -95,7 +91,7 @@
             </template>
           </el-table-column>
         </el-table>
-      </el-collapse-transition>
+      </transition>
     </el-main>
   </el-container>
 </template>
@@ -104,8 +100,6 @@
 import {
   ElButton,
   ElButtonGroup,
-  ElCol,
-  ElCollapseTransition,
   ElContainer,
   ElForm,
   ElFormItem,
@@ -113,32 +107,24 @@ import {
   ElInput,
   ElMain,
   ElMessage,
-  ElOption,
   ElProgress,
-  ElRow,
-  ElSelect,
   ElTable,
-  ElTooltip,
   FormInstance
 } from 'element-plus';
 import {reactive, ref, watch} from 'vue'
-import {Download, InfoFilled, Loading, Setting, SuccessFilled} from '@element-plus/icons-vue';
-import {useDark, useDebounceFn, useToggle} from '@vueuse/core';
-import Dark from '../components/icons/Dark.vue';
-import Light from '../components/icons/Light.vue';
+import {Download, Loading, SuccessFilled} from '@element-plus/icons-vue';
+import {useDebounceFn} from '@vueuse/core';
 import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
-import StopFilled from '../components/icons/StopFilled.vue';
 import PauseFilled from '../components/icons/PauseFilled.vue';
 import {api} from '../api';
 import {useIpcRenderer} from '@vueuse/electron';
-import {useSettingsStore} from '../stores/settings';
-import {DownloadStatus} from '../models/DownloadStatus';
 import VideoInfoCard from '../components/VideoInfoCard.vue';
 import {useMainStore} from '../stores/main';
-import {VideoOption} from '../models/VideoOption';
-import {AudioOption} from '../models/AudioOption';
-import {QualityOption} from '../models/QualityOption';
 import ToolBar from '../components/ToolBar.vue';
+import {Task} from '../models/Task';
+import {VideoInfo} from '../models/VideoInfo';
+import StopFilled from '../components/icons/StopFilled.vue';
+import ScrollableString from '../components/ScrollableString.vue';
 
 const mainStore = useMainStore();
 
@@ -199,41 +185,11 @@ watch(() => [mainStore.preferred, mainStore.maxQuality], () => {
     urlInputHandler(mainStore.url)
 }, {deep: true})
 
-const settingsStore = useSettingsStore()
+const tasks = reactive<Task[]>([]);
 
-interface Row {
-  title: string;
-  progress: number;
-  status: DownloadStatus;
-}
-
-const tableData = reactive<Row[]>([
-  {
-    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
-    progress: 26,
-    status: DownloadStatus.PAUSE,
-  },
-  {
-    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
-    progress: 99,
-    status: DownloadStatus.PAUSE,
-  },
-]);
-
-function stop(row: Row) {
-  row.status = DownloadStatus.STOPPED;
-  row.progress = 0
-}
-
-function startDownload(row: Row) {
-  row.status = DownloadStatus.DOWNLOAD;
-
-  watch(
-      () => row.progress,
-      value => {
-        if (value >= 100) row.status = DownloadStatus.DOWNLOADED
-      }
-  )
+function addTask(info: VideoInfo): void {
+  const task = Task.create(info)
+  tasks.push(task)
 }
 
 const ipcRenderer = useIpcRenderer()
@@ -242,10 +198,6 @@ ipcRenderer.on('download-process', (event, line) => {
 })
 
 const format = (percentage: number): string => `${percentage.toFixed(1)}%`
-
-function pauseDownload(row: Row): void {
-  row.status = DownloadStatus.PAUSE;
-}
 </script>
 
 <style scoped>

@@ -16,7 +16,10 @@ const inner = ref()
 
 const scrollWidth = ref<number>(0)
 const scrollWidthInPX = computed<string>(() => `${scrollWidth.value}px`)
-const duration = computed<string>(() => `${scrollWidth.value * -60}ms`)
+const duration = computed<string>(() => {
+  let value = Math.max(scrollWidth.value * -60, 4000)
+  return `${value}ms`
+})
 
 const calcScroll = (): void => {
   const containerWidth = container.value.getBoundingClientRect().width

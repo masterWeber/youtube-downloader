@@ -1,23 +1,3 @@
-<script setup lang="ts">
-import {Back, Folder} from '@element-plus/icons-vue';
-import {ElCheckbox, ElContainer, ElHeader, ElInputNumber, ElMain, ElSpace} from 'element-plus';
-import {watch} from 'vue';
-import {useSettingsStore} from '../stores/settings';
-import {api} from '../api';
-
-const settingsStore = useSettingsStore()
-
-const openSelectDirDialog = () => {
-  const result = api.selectDirDialog()
-
-  watch(result, (result) => {
-    if (result?.canceled === false) {
-      settingsStore.downloadDirectory = result.path ?? ''
-    }
-  })
-}
-</script>
-
 <template>
   <el-container class="common-layout is-vertical">
     <el-header>
@@ -29,7 +9,7 @@ const openSelectDirDialog = () => {
     <el-main>
       <el-form label-width="auto" label-position="left" v-model="settingsStore">
         <el-form-item label="Сохранить в папку">
-          <el-input v-model="settingsStore.downloadDirectory">
+          <el-input v-model="settingsStore.output">
             <template #append>
               <el-button :icon="Folder" @click="openSelectDirDialog"/>
             </template>
@@ -60,3 +40,23 @@ const openSelectDirDialog = () => {
     </el-main>
   </el-container>
 </template>
+
+<script setup lang="ts">
+import {Back, Folder} from '@element-plus/icons-vue';
+import {ElCheckbox, ElContainer, ElHeader, ElInputNumber, ElMain, ElSpace} from 'element-plus';
+import {watch} from 'vue';
+import {useSettingsStore} from '../stores/settings';
+import {api} from '../api';
+
+const settingsStore = useSettingsStore()
+
+const openSelectDirDialog = () => {
+  const result = api.selectDirDialog()
+
+  watch(result, (result) => {
+    if (result?.canceled === false) {
+      settingsStore.output = result.path ?? ''
+    }
+  })
+}
+</script>

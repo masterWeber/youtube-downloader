@@ -5,6 +5,7 @@
         <el-select
             v-model="mainStore.preferred.video"
             :default-first-option="true"
+            :disabled="loading"
         >
           <el-option
               v-for="item in preferredVideoOptions"
@@ -19,7 +20,9 @@
       <el-form-item label="Аудио">
         <el-select
             v-model="mainStore.preferred.audio"
-            :default-first-option="true">
+            :default-first-option="true"
+            :disabled="loading"
+        >
           <el-option
               v-for="item in preferredAudioOptions"
               :key="item.value"
@@ -34,6 +37,7 @@
         <el-select
             v-model="mainStore.maxQuality"
             :default-first-option="true"
+            :disabled="loading"
         >
           <el-option
               v-for="item in preferredQualityOptions"
@@ -95,6 +99,10 @@ import Dark from './icons/Dark.vue';
 import Light from './icons/Light.vue';
 import {InfoFilled, Setting} from '@element-plus/icons-vue';
 import {api} from '../api';
+
+const props = defineProps<{
+  loading: boolean
+}>()
 
 const isDark = useDark()
 const toggleDark = useToggle(isDark)

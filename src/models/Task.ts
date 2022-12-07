@@ -4,7 +4,9 @@ import {VideoInfo} from './VideoInfo';
 export class Task {
   id: string
   streamId: string
+  url: string
   videoInfo: VideoInfo
+  output: string
   private _progress: number
   get progress(): number {
     return this._progress
@@ -20,12 +22,16 @@ export class Task {
   constructor(
       id: string,
       streamId: string,
+      url: string,
       videoInfo: VideoInfo,
+      output: string,
       progress: number = 0,
       status: DownloadStatus = DownloadStatus.DOWNLOAD
   ) {
     this.id = id;
     this.streamId = streamId;
+    this.url = url;
+    this.output = output;
     this.videoInfo = videoInfo;
     this._progress = progress;
     this.status = status;
@@ -56,11 +62,11 @@ export class Task {
     this._progress = 0
   }
 
-  public isStopped(): boolean {
-    return this.status === DownloadStatus.STOPPED
-  }
-
-  public static create(videoInfo: VideoInfo): Task {
+  public static create(
+      url: string,
+      videoInfo: VideoInfo,
+      output: string
+  ): Task {
     let streamIds = []
     if (videoInfo.streamInfo.video) {
       streamIds.push(videoInfo.streamInfo.video.id)
@@ -72,6 +78,10 @@ export class Task {
     const streamId = streamIds.join('+')
     const id = videoInfo.id + '|' + streamId
 
-    return new Task(id, streamId, videoInfo)
+    return new Task(id, streamId, url, videoInfo, output)
+  }
+
+  public isStopped(): boolean {
+    return this.status === DownloadStatus.STOPPED
   }
 }

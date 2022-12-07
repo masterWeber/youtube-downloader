@@ -1,15 +1,14 @@
 import {StreamSelector} from './StreamSelector';
-
-process.env.DIST_ELECTRON = join(__dirname, '..')
-process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
-process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST_ELECTRON, '../public')
-
 import {app, BrowserWindow, dialog, ipcMain, shell} from 'electron'
 import {release} from 'os'
 import {join} from 'path'
 import youtubeDl from 'youtube-dl-exec'
 import {Info} from './Info';
 import {DownloadOptions} from './DownloadOptions';
+
+process.env.DIST_ELECTRON = join(__dirname, '..')
+process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
+process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST_ELECTRON, '../public')
 
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 
@@ -134,12 +133,51 @@ ipcMain.handle('get-video-info', async (event, options: DownloadOptions) => {
   )
 });
 
-ipcMain.on('download-video', async (event, options) => {
-  const process = youtubeDl.exec(options.url, {
-    output: options.downloadDirectory + '/v'
+ipcMain.on('dm:start', async (event, task) => {
+  const process = youtubeDl.exec(task.url, {
+    format: task.streamId,
+    output: `%(title)s [%(id)s] [${task.streamId}].%(ext)s`,
+    // @ts-ignore
+    paths: task.output,
+    progressTemplate: 'download:{"format_id":%(info.format_id)j,"progress":%(progress._percent_str)j}',
+    newline: true,
   })
+
+  let progress = {}
+
+  task.streamId.split('+').forEach(id => {
+    progress[id] = 0
+  })
+
   process.stdout.addListener('data', (chunk) => {
-    mainWin.webContents.send('download-process', chunk.toString())
+    chunk = chunk.toString().replace(/\r?\n|\r/g, '');
+
+    if (chunk.match('already been downloaded')) {
+      mainWin.webContents.send('download-process', {
+        id: task.id,
+        progress: 100,
+      })
+    }
+
+    if (!isJSON(chunk)) {
+      return;
+    }
+
+    const data = JSON.parse(chunk);
+    if (!data.format_id || !data.progress) {
+      return;
+    }
+
+    progress[data.format_id] = parseFloat(data.progress)
+
+    // @ts-ignore
+    const overallProgress = Object.values(progress)
+        .reduce((acc: number, value: number): number => acc + value, 0) / Object.values(progress).length;
+
+    mainWin.webContents.send('download-process', {
+      id: task.id,
+      progress: overallProgress,
+    })
   })
 })
 
@@ -185,3 +223,12 @@ async function createAboutWindows() {
 }
 
 ipcMain.on('show-about', createAboutWindows)
+
+const isJSON = (str = '') => {
+  try {
+    JSON.parse(str);
+  } catch (e) {
+    return false;
+  }
+  return true;
+}

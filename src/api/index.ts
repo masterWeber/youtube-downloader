@@ -4,6 +4,7 @@ import {VideoInfo} from '../models/VideoInfo';
 import {DownloadOptions} from '../models/DownloadOptions';
 import {SelectDirResult} from '../models/SelectDirResult';
 import {useCatchableIpcRendererInvoke} from '../utils/useCatchableIpcRendererInvoke';
+import {Task} from '../models/Task';
 
 const ipcRenderer = useIpcRenderer()
 
@@ -20,7 +21,13 @@ export const api = {
   getVideoInfo(downloadOptions: DownloadOptions, handleErrors: (reason: any) => void): Ref<VideoInfo | null> {
     return useCatchableIpcRendererInvoke<VideoInfo | null>('get-video-info', handleErrors, downloadOptions);
   },
-  downloadVideo(options: DownloadOptions): void {
-    ipcRenderer.send('download-video', options);
+  startDownloading(task: Task): void {
+    ipcRenderer.send('dm:start', JSON.parse(JSON.stringify(task)));
+  },
+  pauseDownloading(task: Task): void {
+    ipcRenderer.send('dm:pause', JSON.parse(JSON.stringify(task)));
+  },
+  stopDownloading(task: Task): void {
+    ipcRenderer.send('dm:stop', JSON.parse(JSON.stringify(task)));
   }
 }

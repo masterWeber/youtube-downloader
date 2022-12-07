@@ -18,12 +18,12 @@ const setDefaultDownloadDirectory = () => {
   const result = api.getPath('downloads')
   watch(result, (path) => {
     if (path) {
-      settingsStore.downloadDirectory = path ?? ''
+      settingsStore.output = path ?? ''
     }
   })
 }
 
-if (settingsStore.downloadDirectory === '') {
+if (settingsStore.output === '') {
   setDefaultDownloadDirectory()
 }
 </script>

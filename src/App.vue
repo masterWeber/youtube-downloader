@@ -18,13 +18,13 @@ onMounted(() => {
 
   if (settingsStore.autoResumeDownloadOnStartup) {
     mainStore.downloadTasks.forEach((task) => {
-      if (task.isDownload()) {
+      if (task.isStarted()) {
         task.start()
       }
     })
   } else {
     mainStore.downloadTasks.forEach((task) => {
-      if (task.isDownload()) {
+      if (task.isStarted()) {
         task.pause()
       }
     })

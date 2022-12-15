@@ -36,14 +36,21 @@
         </el-form-item>
       </el-form>
 
-      <VideoInfoCard :data="mainStore.videoInfo"/>
+      <VideoInfoCard
+          :data="mainStore.videoInfo"
+          @close="mainStore.videoInfo = null"
+      />
 
       <transition name="el-fade-in">
         <el-table
-            :data="queue"
+            ref="tableRef"
+            :data="Array.from(downloadTasks.values())"
             :show-header="false"
+            highlight-current-row
             scrollbar-always-on
-            v-if="queue.length > 0"
+            @current-change="handleCurrentChange"
+            @row-click="handleCurrentChange"
+            v-if="downloadTasks.size > 0"
         >
           <el-table-column :min-width="50">
             <template #default="{row: task}">
@@ -54,28 +61,29 @@
             <template #default="{row: task}">
               <transition name="el-fade-in">
                 <el-progress
-                    v-if="task.id && !task.isStopped() && !task.isDownloaded()"
-                    :text-inside="true"
-                    :stroke-width="24"
-                    :format="format"
-                    :percentage="task.progress"
-                    :status="task.isPaused() ? 'warning' : ''"
+                    v-if="task.id && !task.isStopped()"
+                    :stroke-width="8"
+                    :format="task.isWaitProgress() ? () => format(task.progress) : format"
+                    :percentage="task.isWaitProgress() ? 50 : task.progress"
+                    :duration="1"
+                    :indeterminate="task.isWaitProgress()"
+                    :color="task.isDownload() ? colors : '#909399'"
                 />
               </transition>
             </template>
           </el-table-column>
           <el-table-column :width="130" align="right">
             <template #default="{row: task}">
-              <el-button-group v-if="task.id && !task.isDownloaded()">
+              <el-button-group v-if="task.id && !task.isFinished()">
                 <el-button
-                    :icon="task.isDownload() ? PauseFilled : PlayArrowFilled"
+                    :icon="task.isStarted() ? PauseFilled : PlayArrowFilled"
                     @click="() => {
-                    if (task.isDownload()) {
-                      task.pause()
-                    } else {
-                      task.start()
-                    }
-                  }"
+                      if (task.isStarted()) {
+                        task.pause()
+                      } else {
+                        task.start()
+                      }
+                    }"
                     plain round :circle="task.isStopped()"
                 >
                 </el-button>
@@ -88,13 +96,19 @@
               </el-button-group>
               <el-row v-else justify="end">
                 <transition name="el-fade-in" appear>
-                  <el-icon
-                      :size="24"
-                      style="padding: 4px 0"
-                      color="var(--el-color-success)"
-                  >
-                    <SuccessFilled/>
-                  </el-icon>
+                  <div>
+                    <el-tooltip
+                        content="Открыть папку назначения"
+                        :enterable="false"
+                        :hide-after="0"
+                    >
+                      <el-button
+                          @click="openDestination(task)"
+                          :icon="Folder"
+                          circle plain
+                      />
+                    </el-tooltip>
+                  </div>
                 </transition>
               </el-row>
             </template>
@@ -116,42 +130,107 @@ import {
   ElInput,
   ElMain,
   ElMessage,
+  ElMessageBox,
   ElProgress,
   ElTable,
-  FormInstance
-} from 'element-plus';
-import {reactive, ref, watch} from 'vue'
-import {Download, Loading, SuccessFilled} from '@element-plus/icons-vue';
-import {useDebounceFn} from '@vueuse/core';
-import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
-import PauseFilled from '../components/icons/PauseFilled.vue';
-import {api} from '../api';
-import {useIpcRenderer} from '@vueuse/electron';
-import VideoInfoCard from '../components/VideoInfoCard.vue';
-import {useMainStore} from '../stores/main';
-import ToolBar from '../components/ToolBar.vue';
-import {Task} from '../models/Task';
-import {VideoInfo} from '../models/VideoInfo';
-import StopFilled from '../components/icons/StopFilled.vue';
-import ScrollableString from '../components/ScrollableString.vue';
-import {useSettingsStore} from '../stores/settings';
+  FormInstance,
+} from 'element-plus'
+import {markRaw, ref, watch} from 'vue'
+import {DocumentDelete, Download, Folder, Loading} from '@element-plus/icons-vue'
+import {useDebounceFn} from '@vueuse/core'
+import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue'
+import PauseFilled from '../components/icons/PauseFilled.vue'
+import {api} from '../api'
+import VideoInfoCard from '../components/VideoInfoCard.vue'
+import {useMainStore} from '../stores/main'
+import ToolBar from '../components/ToolBar.vue'
+import {Task} from '../models/Task'
+import {VideoInfo} from '../models/VideoInfo'
+import StopFilled from '../components/icons/StopFilled.vue'
+import ScrollableString from '../components/ScrollableString.vue'
+import {useSettingsStore} from '../stores/settings'
+import {DownloadStatus} from '../models/DownloadStatus'
 
-const mainStore = useMainStore();
-const settingsStore = useSettingsStore();
+const mainStore = useMainStore()
+const settingsStore = useSettingsStore()
 
 const formRef = ref<FormInstance>()
+const tableRef = ref<InstanceType<typeof ElTable>>()
 
 const loadingVideoInfo = ref<boolean>(false)
-const invalidYoutubeUrl = ref<boolean>(true)
+const invalidYoutubeUrl = ref<boolean>(!mainStore.videoInfo)
 
-const log = (v: any) => {
-  console.log(v)
-  return true
+const selectedTask = ref<Task | null>(null)
+
+const handleCurrentChange = (task: Task | null) => {
+  selectedTask.value = task
+  if (task) {
+    mainStore.videoInfo = task.videoInfo
+  }
 }
+
+const openDestination = (task: Task) => {
+  api.showItemInFolder(task.output as string)
+}
+
+document.addEventListener('keyup', (event) => {
+  const task = selectedTask.value
+  if (event.key === 'Delete' && task) {
+    showDeleteDialog(task as Task)
+  }
+})
+
+const showDeleteDialog = (task: Task): void => {
+  const taskStatus = task.status
+
+  if (task.isStarted()) {
+    task.pause()
+  }
+
+  ElMessageBox.confirm(
+      `Вы действительно хотите удалить "${getTaskTitle(task)}" ?`,
+      {
+        confirmButtonText: 'Удалить',
+        confirmButtonClass: 'el-button--danger',
+        cancelButtonText: 'Отменить',
+        type: 'warning',
+        icon: markRaw(DocumentDelete),
+      },
+  ).then(() => {
+    const successMessage = `"${getTaskTitle(task)}" - удален`
+
+    if (!task.isStopped() && !task.isFinished()) {
+      task.stop()
+    }
+
+    downloadTasks.delete(task.id)
+
+    tableRef.value?.setCurrentRow(null)
+    selectedTask.value = null
+
+    ElMessage.success({
+      message: successMessage,
+      grouping: true,
+    })
+  }).catch((reason) => {
+    console.warn(reason)
+    if (taskStatus === DownloadStatus.DOWNLOAD) {
+      task.start()
+    }
+  })
+}
+
+const colors = [
+  {color: '#f56c6c', percentage: 10},
+  {color: '#e6a23c', percentage: 30},
+  {color: '#1989fa', percentage: 70},
+  {color: '#6f7ad3', percentage: 50},
+  {color: '#5cb87a', percentage: 90},
+]
 
 const urlInputHandler = async (url: string) => {
   if (!formRef.value) return
-  const formEl = formRef.value;
+  const formEl = formRef.value
 
   try {
     invalidYoutubeUrl.value = true
@@ -178,17 +257,16 @@ const urlInputHandler = async (url: string) => {
         loadingVideoInfo.value = false
         invalidYoutubeUrl.value = true
 
-        console.log(reason.message)
-
         ElMessage.error({
           message: 'Не удалось найти видео, проверьте URL.',
+          grouping: true,
         })
       })
   watch(result, (result) => {
     if (null !== result) {
       invalidYoutubeUrl.value = false
       loadingVideoInfo.value = false
-      mainStore.videoInfo = result;
+      mainStore.videoInfo = result
     }
   })
 }
@@ -200,31 +278,42 @@ watch(() => [mainStore.preferred, mainStore.maxQuality], () => {
     urlInputHandler(mainStore.url)
 }, {deep: true})
 
-const queue = reactive<Task[]>([]);
+const downloadTasks = mainStore.downloadTasks
 
-function addTask(info: VideoInfo): void {
-  const task = Task.create(mainStore.url, info, settingsStore.output)
+watch(downloadTasks, (downloadTasks) => {
+  if (downloadTasks.size === 0 && invalidYoutubeUrl.value) {
+    mainStore.videoInfo = null
+  }
+})
 
-  for (const existTask of queue) {
-    if (existTask.id === task.id) {
-      ElMessage.warning({
-        message: 'Уже есть в очереди.',
-      })
-      return;
-    }
+function addTask(info: VideoInfo | null): void {
+  if (info === null) return
+  const task = Task.create(mainStore.url, info, settingsStore.destination)
+
+  if (downloadTasks.has(task.id)) {
+    ElMessage.warning({
+      message: 'Уже есть в очереди.',
+      grouping: true,
+    })
+    return
   }
 
-  queue.push(task)
-  api.startDownloading(task)
+  downloadTasks.set(task.id, task)
+  task.start()
 }
 
-const ipcRenderer = useIpcRenderer()
-ipcRenderer.on('download-process', (event, progress) => {
-  queue.forEach((task) => {
-    if (task.id === progress.id) {
-      task.progress = progress.progress
-    }
-  })
+api.onProgress((progress) => {
+  const task = downloadTasks.get(progress.id)
+  if (task) {
+    task.progress = progress.value
+  }
+})
+
+api.onFinished((data) => {
+  const task = downloadTasks.get(data.id)
+  if (task) {
+    task.output = data.output
+  }
 })
 
 const getTaskTitle = (task: Task): string => {

@@ -2,7 +2,7 @@ import {defineStore} from 'pinia';
 import {RemovableRef, useLocalStorage} from '@vueuse/core';
 
 interface State {
-  output: RemovableRef<string>,
+  destination: RemovableRef<string>,
   maxActiveDownloads: RemovableRef<number>,
   autoDownloadSubtitle: RemovableRef<boolean>,
   autoResumeDownloadOnStartup: RemovableRef<boolean>,
@@ -11,7 +11,7 @@ interface State {
 
 export const useSettingsStore = defineStore('settings', {
   state: (): State => ({
-    output: useLocalStorage('settings/output', ''),
+    destination: useLocalStorage('settings/destination', ''),
     maxActiveDownloads: useLocalStorage('settings/maxActiveDownloads', 6),
     autoDownloadSubtitle: useLocalStorage('settings/autoDownloadSubtitle', true),
     autoResumeDownloadOnStartup: useLocalStorage('settings/autoResumeDownloadOnStartup', false),

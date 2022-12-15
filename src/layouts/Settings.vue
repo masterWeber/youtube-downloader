@@ -9,7 +9,7 @@
     <el-main>
       <el-form label-width="auto" label-position="left" v-model="settingsStore">
         <el-form-item label="Сохранить в папку">
-          <el-input v-model="settingsStore.output">
+          <el-input v-model="settingsStore.destination">
             <template #append>
               <el-button :icon="Folder" @click="openSelectDirDialog"/>
             </template>
@@ -42,20 +42,24 @@
 </template>
 
 <script setup lang="ts">
-import {Back, Folder} from '@element-plus/icons-vue';
-import {ElCheckbox, ElContainer, ElHeader, ElInputNumber, ElMain, ElSpace} from 'element-plus';
-import {watch} from 'vue';
-import {useSettingsStore} from '../stores/settings';
-import {api} from '../api';
+import {Back, Folder} from '@element-plus/icons-vue'
+import {ElCheckbox, ElContainer, ElHeader, ElInputNumber, ElMain, ElSpace} from 'element-plus'
+import {watch} from 'vue'
+import {useSettingsStore} from '../stores/settings'
+import {api} from '../api'
 
 const settingsStore = useSettingsStore()
 
+watch(() => settingsStore.maxActiveDownloads, (value) => {
+  api.changeMaxActiveDownloads(value)
+})
+
 const openSelectDirDialog = () => {
-  const result = api.selectDirDialog()
+  const result = api.showSelectDirDialog()
 
   watch(result, (result) => {
     if (result?.canceled === false) {
-      settingsStore.output = result.path ?? ''
+      settingsStore.destination = result.path ?? ''
     }
   })
 }

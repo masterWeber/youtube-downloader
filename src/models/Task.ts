@@ -1,12 +1,26 @@
-import {DownloadStatus} from './DownloadStatus';
-import {VideoInfo} from './VideoInfo';
+import {DownloadStatus} from './DownloadStatus'
+import {VideoInfo} from './VideoInfo'
+import {api} from '../api'
 
 export class Task {
   id: string
   streamId: string
   url: string
   videoInfo: VideoInfo
-  output: string
+  destination: string
+  private _output: string | null = null
+
+  get output(): string | null {
+    return this._output
+  }
+
+  set output(value: string | null) {
+    if (this.isDownloaded() && value) {
+      this.status = DownloadStatus.FINISHED
+    }
+    this._output = value
+  }
+
   private _progress: number
   get progress(): number {
     return this._progress
@@ -14,39 +28,61 @@ export class Task {
 
   set progress(value: number) {
     this._progress = value
+    if (this.status === DownloadStatus.WAIT_PROGRESS) {
+      this.status = DownloadStatus.DOWNLOAD
+    }
     if (value >= 100) this.status = DownloadStatus.DOWNLOADED
   }
 
   status: DownloadStatus
+
+  private _manager
 
   constructor(
       id: string,
       streamId: string,
       url: string,
       videoInfo: VideoInfo,
-      output: string,
+      destination: string,
       progress: number = 0,
-      status: DownloadStatus = DownloadStatus.DOWNLOAD
+      status: DownloadStatus = DownloadStatus.DOWNLOAD,
+      output: string | null = null,
   ) {
-    this.id = id;
-    this.streamId = streamId;
-    this.url = url;
-    this.output = output;
-    this.videoInfo = videoInfo;
-    this._progress = progress;
-    this.status = status;
+    this.id = id
+    this.streamId = streamId
+    this.url = url
+    this.destination = destination
+    this.videoInfo = videoInfo
+    this._progress = progress
+    this.status = status
+    this.output = output
+    this._manager = {
+      pause: api.pauseDownloading,
+      start: api.startDownloading,
+      stop: api.stopDownloading,
+    }
   }
 
   public start(): void {
-    this.status = DownloadStatus.DOWNLOAD;
+    this._manager.start(this)
+    this.status = DownloadStatus.WAIT_PROGRESS
   }
 
   public isDownload(): boolean {
     return this.status === DownloadStatus.DOWNLOAD
   }
 
+  public isStarted(): boolean {
+    return this.isDownload() || this.isWaitProgress()
+  }
+
+  public isWaitProgress(): boolean {
+    return this.status === DownloadStatus.WAIT_PROGRESS
+  }
+
   public pause(): void {
-    this.status = DownloadStatus.PAUSE;
+    this._manager.pause(this.id)
+    this.status = DownloadStatus.PAUSE
   }
 
   public isPaused(): boolean {
@@ -58,14 +94,23 @@ export class Task {
   }
 
   public stop(): void {
-    this.status = DownloadStatus.STOPPED;
+    this._manager.stop(this.id)
+    this.status = DownloadStatus.STOPPED
     this._progress = 0
+  }
+
+  public isStopped(): boolean {
+    return this.status === DownloadStatus.STOPPED
+  }
+
+  public isFinished(): boolean {
+    return this.status === DownloadStatus.FINISHED
   }
 
   public static create(
       url: string,
       videoInfo: VideoInfo,
-      output: string
+      destination: string,
   ): Task {
     let streamIds = []
     if (videoInfo.streamInfo.video) {
@@ -78,10 +123,6 @@ export class Task {
     const streamId = streamIds.join('+')
     const id = videoInfo.id + '|' + streamId
 
-    return new Task(id, streamId, url, videoInfo, output)
-  }
-
-  public isStopped(): boolean {
-    return this.status === DownloadStatus.STOPPED
+    return new Task(id, streamId, url, videoInfo, destination)
   }
 }

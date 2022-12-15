@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from 'vue';
+import {computed, ref} from 'vue'
 
 const props = defineProps<{
   value: string
@@ -22,9 +22,12 @@ const duration = computed<string>(() => {
 })
 
 const calcScroll = (): void => {
+  if (!container.value) return
+
   const containerWidth = container.value.getBoundingClientRect().width
   const innerWidth = inner.value.getBoundingClientRect().width
-  scrollWidth.value = Math.round(-(innerWidth - containerWidth))
+  const value = Math.round(-(innerWidth - containerWidth))
+  scrollWidth.value = value > 0 ? 0 : value
 }
 </script>
 

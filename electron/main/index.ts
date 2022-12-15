@@ -144,14 +144,14 @@ ipcMain.handle(Channel.STREAM_INFO, async (event, options: DownloadOptions) => {
 
 const downloadManager = new DownloadManager(1)
 downloadManager.onProgress = (progress: number, task: DownloadTask) => {
-  mainWin.webContents.send(Channel.DM_PROGRESS, {
+  mainWin?.webContents.send(Channel.DM_PROGRESS, {
     id: task.id.value,
     value: progress,
   })
 }
 
 downloadManager.onFinished = (output: string, task: DownloadTask) => {
-  mainWin.webContents.send(Channel.DM_FINISHED, {
+  mainWin?.webContents.send(Channel.DM_FINISHED, {
     id: task.id.value,
     output: output,
   })

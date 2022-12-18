@@ -1,10 +1,12 @@
-import {defineStore} from 'pinia';
-import {RemovableRef, useLocalStorage} from '@vueuse/core';
+import {defineStore} from 'pinia'
+import {RemovableRef, useLocalStorage} from '@vueuse/core'
+import {api} from '../api'
+import {watch} from 'vue'
 
 interface State {
   destination: RemovableRef<string>,
   maxActiveDownloads: RemovableRef<number>,
-  autoDownloadSubtitle: RemovableRef<boolean>,
+  autoDownloadSubtitles: RemovableRef<boolean>,
   autoResumeDownloadOnStartup: RemovableRef<boolean>,
   showAboutOnStartup: RemovableRef<boolean>,
 }
@@ -17,5 +19,21 @@ export const useSettingsStore = defineStore('settings', {
     autoResumeDownloadOnStartup: useLocalStorage('settings/autoResumeDownloadOnStartup', false),
     showAboutOnStartup: useLocalStorage('settings/showAboutOnStartup', true),
   }),
-  actions: {},
+  actions: {
+    reset() {
+      this.setDefaultDownloadDirectory()
+      this.maxActiveDownloads = 10
+      this.autoDownloadSubtitles = true
+      this.autoResumeDownloadOnStartup = false
+      this.showAboutOnStartup = true
+    },
+    setDefaultDownloadDirectory() {
+      const result = api.getSystemPath('downloads')
+      watch(result, (path) => {
+        if (path) {
+          this.destination = path ?? ''
+        }
+      })
+    },
+  },
 })

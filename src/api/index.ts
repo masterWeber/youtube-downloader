@@ -22,6 +22,12 @@ export const api = {
   getSystemPath(name: string): Ref<string | null> {
     return ipcRenderer.invoke(Channel.SYSTEM_GET_PATH, name)
   },
+  getVersion(): Ref<string | null> {
+    return ipcRenderer.invoke(Channel.APP_VERSION)
+  },
+  relaunch(): void {
+    return ipcRenderer.send(Channel.APP_RELAUNCH)
+  },
   getVideoInfo(downloadOptions: DownloadOptions, handleErrors: (reason: any) => void): Ref<VideoInfo | null> {
     return useCatchableIpcRendererInvoke(Channel.STREAM_INFO, handleErrors, downloadOptions)
   },

@@ -107,6 +107,12 @@ export class Task {
     return this.status === DownloadStatus.FINISHED
   }
 
+  public finish(output: string): void {
+    this.progress = 100
+    this._output = output
+    this.status = DownloadStatus.FINISHED
+  }
+
   public static create(
       url: string,
       videoInfo: VideoInfo,

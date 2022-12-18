@@ -2,7 +2,7 @@
 import {RouterView} from 'vue-router'
 import {useDark} from '@vueuse/core'
 import {useSettingsStore} from './stores/settings'
-import {onMounted, watch} from 'vue'
+import {onMounted} from 'vue'
 import {api} from './api'
 import {useMainStore} from './stores/main'
 
@@ -32,17 +32,8 @@ onMounted(() => {
   }
 })
 
-const setDefaultDownloadDirectory = () => {
-  const result = api.getSystemPath('downloads')
-  watch(result, (path) => {
-    if (path) {
-      settingsStore.destination = path ?? ''
-    }
-  })
-}
-
 if (settingsStore.destination === '') {
-  setDefaultDownloadDirectory()
+  settingsStore.setDefaultDownloadDirectory()
 }
 </script>
 

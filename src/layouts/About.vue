@@ -1,15 +1,8 @@
-<script setup lang="ts">
-import {useSettingsStore} from '../stores/settings';
-import {ElCheckbox, ElContainer, ElFooter, ElForm, ElFormItem, ElHeader, ElLink, ElMain, ElRow} from 'element-plus';
-
-const settingsStore = useSettingsStore()
-</script>
-
 <template>
   <el-container class="common-layout is-vertical">
     <el-header>
       <el-row justify="center">
-        <h1>YouTube Downloader v0.2.0</h1>
+        <h1>YouTube Downloader v{{version}}</h1>
       </el-row>
     </el-header>
     <el-main style="text-align: center">
@@ -39,3 +32,12 @@ const settingsStore = useSettingsStore()
     </el-footer>
   </el-container>
 </template>
+
+<script setup lang="ts">
+import {useSettingsStore} from '../stores/settings';
+import {ElCheckbox, ElContainer, ElFooter, ElForm, ElFormItem, ElHeader, ElLink, ElMain, ElRow} from 'element-plus';
+import {api} from '../api'
+
+const settingsStore = useSettingsStore()
+const version = api.getVersion()
+</script>

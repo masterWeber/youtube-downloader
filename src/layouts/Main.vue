@@ -14,10 +14,20 @@
             }]"
         >
           <el-input v-model.trim="mainStore.url" spellcheck="false">
-            <template #suffix>
+            <template #append>
               <transition name="el-fade-in">
-                <el-icon v-if="loadingVideoInfo">
+                <el-icon
+                    v-if="loadingVideoInfo"
+                    style="position: absolute"
+                >
                   <Loading class="video-info-loading-spinner"/>
+                </el-icon>
+                <el-icon
+                    v-else
+                    style="cursor: pointer; position: absolute"
+                    @click="urlInputHandler(mainStore.url)"
+                >
+                  <Search/>
                 </el-icon>
               </transition>
             </template>
@@ -49,7 +59,7 @@
             highlight-current-row
             scrollbar-always-on
             @current-change="handleCurrentChange"
-            @row-click="handleCurrentChange"
+            @cell-click="handleCellClick"
             v-if="downloadTasks.size > 0"
         >
           <el-table-column :min-width="50">
@@ -64,10 +74,10 @@
                     v-if="task.id && !task.isStopped()"
                     :stroke-width="8"
                     :format="task.isWaitProgress() ? () => format(task.progress) : format"
-                    :percentage="task.isWaitProgress() ? 50 : task.progress"
+                    :percentage="task.isWaitProgress() ? 25 : task.progress"
                     :duration="1"
                     :indeterminate="task.isWaitProgress()"
-                    :color="task.isDownload() ? colors : '#909399'"
+                    :color="task.isDownload() || task.isDownloaded() || task.isFinished() ? colors : '#909399'"
                 />
               </transition>
             </template>
@@ -84,7 +94,9 @@
                         task.start()
                       }
                     }"
-                    plain round :circle="task.isStopped()"
+                    plain
+                    round
+                    :circle="task.isStopped()"
                 >
                 </el-button>
                 <el-button
@@ -136,7 +148,7 @@ import {
   FormInstance,
 } from 'element-plus'
 import {markRaw, ref, watch} from 'vue'
-import {DocumentDelete, Download, Folder, Loading} from '@element-plus/icons-vue'
+import {DocumentDelete, Download, Folder, Loading, Search} from '@element-plus/icons-vue'
 import {useDebounceFn} from '@vueuse/core'
 import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue'
 import PauseFilled from '../components/icons/PauseFilled.vue'
@@ -162,10 +174,24 @@ const invalidYoutubeUrl = ref<boolean>(!mainStore.videoInfo)
 
 const selectedTask = ref<Task | null>(null)
 
-const handleCurrentChange = (task: Task | null) => {
+const selectTask = (task: Task | null) => {
   selectedTask.value = task
+}
+
+const showVideoInfo = (task: Task | null) => {
   if (task) {
     mainStore.videoInfo = task.videoInfo
+  }
+}
+
+const handleCurrentChange = (task: Task | null) => {
+  selectTask(task)
+}
+
+const handleCellClick = (task: Task | null, cell: any) => {
+  if (cell.getColumnIndex() === 0) {
+    selectTask(task)
+    showVideoInfo(task)
   }
 }
 
@@ -197,21 +223,13 @@ const showDeleteDialog = (task: Task): void => {
         icon: markRaw(DocumentDelete),
       },
   ).then(() => {
-    const successMessage = `"${getTaskTitle(task)}" - удален`
-
     if (!task.isStopped() && !task.isFinished()) {
       task.stop()
     }
-
     downloadTasks.delete(task.id)
 
     tableRef.value?.setCurrentRow(null)
     selectedTask.value = null
-
-    ElMessage.success({
-      message: successMessage,
-      grouping: true,
-    })
   }).catch((reason) => {
     console.warn(reason)
     if (taskStatus === DownloadStatus.DOWNLOAD) {
@@ -221,10 +239,8 @@ const showDeleteDialog = (task: Task): void => {
 }
 
 const colors = [
-  {color: '#f56c6c', percentage: 10},
-  {color: '#e6a23c', percentage: 30},
-  {color: '#1989fa', percentage: 70},
-  {color: '#6f7ad3', percentage: 50},
+  {color: '#1989fa', percentage: 50},
+  {color: '#6f7ad3', percentage: 70},
   {color: '#5cb87a', percentage: 90},
 ]
 
@@ -312,7 +328,7 @@ api.onProgress((progress) => {
 api.onFinished((data) => {
   const task = downloadTasks.get(data.id)
   if (task) {
-    task.output = data.output
+    task.finish(data.output)
   }
 })
 
@@ -333,7 +349,6 @@ const format = (percentage: number): string => `${percentage.toFixed(1)}%`
 
 <style scoped>
 .video-info-loading-spinner {
-  color: var(--el-color-primary);
   animation-name: rotating;
   animation-duration: 1s;
   animation-iteration-count: infinite;

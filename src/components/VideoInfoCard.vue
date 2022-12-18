@@ -96,8 +96,11 @@ const audioStreamInfo = computed<string | null>(() => {
 }
 
 .video-info-card-container {
-  position: relative;
   margin-bottom: 18px;
+}
+
+.video-info-card {
+  position: relative;
   overflow: hidden;
 }
 

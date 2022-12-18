@@ -87,23 +87,6 @@ app.on('activate', () => {
   }
 })
 
-ipcMain.handle('open-win', (event, arg) => {
-  const childWindow = new BrowserWindow({
-    webPreferences: {
-      preload,
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  })
-
-  if (app.isPackaged) {
-    childWindow.loadFile(indexHtml, {hash: arg})
-  } else {
-    childWindow.loadURL(`${url}#${arg}`)
-    // childWindow.webContents.openDevTools({ mode: "undocked", activate: true })
-  }
-})
-
 ipcMain.handle(Channel.DIALOG_OPEN_DIRECTORY, async () => {
   let {canceled, filePaths} = await dialog.showOpenDialog(mainWin, {
     properties: ['openDirectory'],
@@ -115,12 +98,21 @@ ipcMain.handle(Channel.DIALOG_OPEN_DIRECTORY, async () => {
   }
 })
 
+ipcMain.handle(Channel.APP_VERSION, () => {
+  return app.getVersion()
+})
+
+ipcMain.on(Channel.APP_RELAUNCH, () => {
+  app.relaunch()
+  app.quit()
+})
+
 ipcMain.handle(Channel.SYSTEM_GET_PATH, (event, name) => {
   return app.getPath(name)
 })
 
 ipcMain.on(Channel.SYSTEM_SHOW_ITEM_IN_FOLDER, (event, fullPath) => {
-  return shell.showItemInFolder(fullPath)
+  shell.showItemInFolder(fullPath)
 })
 
 ipcMain.handle(Channel.STREAM_INFO, async (event, options: DownloadOptions) => {
@@ -157,8 +149,12 @@ downloadManager.onFinished = (output: string, task: DownloadTask) => {
   })
 }
 
-ipcMain.on(Channel.DM_MAX_ACTIVE_DOWNLOADS, async (event, maxActiveDownloads) => {
-  downloadManager.maxActiveDownloads = maxActiveDownloads
+ipcMain.on(Channel.DM_MAX_ACTIVE_DOWNLOADS, async (event, value: number) => {
+  downloadManager.maxActiveDownloads = value
+})
+
+ipcMain.on(Channel.DM_AUTO_DOWNLOAD_SUBTITLES, async (event, value: boolean) => {
+  downloadManager.autoDownloadSubtitles = value
 })
 
 ipcMain.on(Channel.DM_START, async (event, taskData) => {

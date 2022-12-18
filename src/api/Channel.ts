@@ -1,4 +1,6 @@
 export enum Channel {
+  APP_VERSION = 'app:version',
+  APP_RELAUNCH = 'app:relaunch',
   DIALOG_ABOUT = 'dialog:about',
   DIALOG_OPEN_DIRECTORY = 'dialog:open-directory',
   SYSTEM_GET_PATH = 'system:get-path',

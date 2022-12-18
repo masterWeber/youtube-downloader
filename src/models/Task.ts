@@ -3,11 +3,11 @@ import {VideoInfo} from './VideoInfo'
 import {api} from '../api'
 
 export class Task {
-  id: string
-  streamId: string
-  url: string
-  videoInfo: VideoInfo
-  destination: string
+  public id: string
+  public streamId: string
+  public url: string
+  public videoInfo: VideoInfo
+  public destination: string
   private _output: string | null = null
 
   get output(): string | null {
@@ -34,7 +34,7 @@ export class Task {
     if (value >= 100) this.status = DownloadStatus.DOWNLOADED
   }
 
-  status: DownloadStatus
+  public status: DownloadStatus
 
   private _manager
 

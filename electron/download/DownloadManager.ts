@@ -10,6 +10,7 @@ declare type OnProgressCallBack = (progress: number, task: DownloadTask) => void
 declare type OnFinishedCallBack = (output: string, task: DownloadTask) => void
 
 export class DownloadManager {
+  public autoDownloadSubtitles: boolean = false
   private _maxActiveDownloads: number
   set maxActiveDownloads(value: number) {
     if (value <= 0) {
@@ -61,6 +62,8 @@ export class DownloadManager {
         this.onFinished(output, task)
       }
     }
+
+    task.downloadSubtitles = this.autoDownloadSubtitles
 
     this._pool.set(task.id.value, task)
     this.start(task.id)

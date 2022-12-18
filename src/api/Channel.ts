@@ -9,5 +9,6 @@ export enum Channel {
   DM_FINISHED = 'dm:finished',
   DM_PAUSE = 'dm:pause',
   DM_STOP = 'dm:stop',
-  DM_MAX_ACTIVE_DOWNLOADS = 'dm:max-active-downloads'
+  DM_MAX_ACTIVE_DOWNLOADS = 'dm:max-active-downloads',
+  DM_AUTO_DOWNLOAD_SUBTITLES = 'dm:auto-download-subtitles'
 }

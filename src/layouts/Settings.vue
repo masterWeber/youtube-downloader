@@ -26,7 +26,7 @@
         </el-form-item>
         <el-form-item>
           <el-checkbox
-              v-model="settingsStore.autoDownloadSubtitle"
+              v-model="settingsStore.autoDownloadSubtitles"
               label="Автоматическая загрузка субтитров"
           />
         </el-form-item>
@@ -52,6 +52,10 @@ const settingsStore = useSettingsStore()
 
 watch(() => settingsStore.maxActiveDownloads, (value) => {
   api.changeMaxActiveDownloads(value)
+})
+
+watch(() => settingsStore.autoDownloadSubtitles, (value) => {
+  api.setAutoDownloadSubtitles(value)
 })
 
 const openSelectDirDialog = () => {

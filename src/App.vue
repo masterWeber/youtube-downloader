@@ -15,6 +15,7 @@ onMounted(() => {
     api.showAbout()
   }
   api.changeMaxActiveDownloads(settingsStore.maxActiveDownloads)
+  api.setAutoDownloadSubtitles(settingsStore.autoDownloadSubtitles)
 
   if (settingsStore.autoResumeDownloadOnStartup) {
     mainStore.downloadTasks.forEach((task) => {

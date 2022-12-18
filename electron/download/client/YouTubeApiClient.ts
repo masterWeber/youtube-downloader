@@ -17,7 +17,6 @@ export class YouTubeApiClient implements ApiClient {
 
   set output(value: string | null) {
     this._output = value
-    this._onFinished(value)
   }
 
   constructor(ytDl: typeof youtubeDl) {
@@ -27,7 +26,7 @@ export class YouTubeApiClient implements ApiClient {
   private _onProgress: (progress: number) => void | null = null
   private _onFinished: (output: string) => void | null = null
 
-  public start(streamId: string, url: string, destination: string): void {
+  public start(streamId: string, url: string, destination: string, downloadSubtitles: boolean): void {
     if (this._process) {
       this.resume()
       return
@@ -38,22 +37,39 @@ export class YouTubeApiClient implements ApiClient {
       this._progress.set(id, 0)
     })
 
-    this._process = this._youtubeDl.exec(url, {
+    let options = {
       format: streamId,
       output: `%(title)s [%(id)s] [${streamId}].%(ext)s`,
-      // @ts-ignore
       paths: destination,
       progressTemplate: 'download:{"format_id":%(info.format_id)j,"progress":%(progress._percent_str)j}',
       newline: true,
-    })
+      embedThumbnail: true,
+    }
+
+    if (downloadSubtitles) {
+      options = {
+        ...options,
+        ...{
+          subFormat: 'best',
+          subLang: 'en,ru',
+          embedSubs: true,
+          writeAutoSub: true,
+        },
+      }
+    }
+
+    this._process = this._youtubeDl.exec(url, options)
 
     this._process.stdout.addListener('data', this.onData.bind(this))
+    this._process.on('exit', (exitCode) => {
+      if (exitCode === 0) {
+        this._onFinished(this.output)
+      }
+    })
   }
 
   private onData(chunk: string): void {
     chunk = chunk.toString()
-
-    console.log(chunk)
 
     if (chunk.match(/\[download] Destination: /)) {
       const tempFile = chunk.match(/\[download] Destination: (.+)/)[1]
@@ -74,7 +90,7 @@ export class YouTubeApiClient implements ApiClient {
     }
 
     const data = JSON.parse(chunk)
-    if (!data.format_id || !data.progress) {
+    if (!data.format_id || data.format_id === 'NA' || !data.progress) {
       return
     }
 
@@ -100,11 +116,15 @@ export class YouTubeApiClient implements ApiClient {
   public stop(): void {
     this._progress.clear()
     this._process.kill()
-    this.deleteTempFiles()
+    this.deleteFiles()
     this._process = null
   }
 
-  private deleteTempFiles(): void {
+  private deleteFiles(): void {
+    if (fs.existsSync(this.output)) {
+      fs.unlinkSync(this.output)
+    }
+
     this._tempFiles.forEach(path => {
       if (fs.existsSync(path)) {
         fs.unlinkSync(path)

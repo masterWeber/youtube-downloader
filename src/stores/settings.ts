@@ -12,8 +12,8 @@ interface State {
 export const useSettingsStore = defineStore('settings', {
   state: (): State => ({
     destination: useLocalStorage('settings/destination', ''),
-    maxActiveDownloads: useLocalStorage('settings/maxActiveDownloads', 6),
-    autoDownloadSubtitle: useLocalStorage('settings/autoDownloadSubtitle', true),
+    maxActiveDownloads: useLocalStorage('settings/maxActiveDownloads', 10),
+    autoDownloadSubtitles: useLocalStorage('settings/autoDownloadSubtitle', true),
     autoResumeDownloadOnStartup: useLocalStorage('settings/autoResumeDownloadOnStartup', false),
     showAboutOnStartup: useLocalStorage('settings/showAboutOnStartup', true),
   }),

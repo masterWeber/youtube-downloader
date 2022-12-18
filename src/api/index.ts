@@ -37,6 +37,9 @@ export const api = {
   changeMaxActiveDownloads(value: number): void {
     ipcRenderer.send(Channel.DM_MAX_ACTIVE_DOWNLOADS, value)
   },
+  setAutoDownloadSubtitles(value: boolean): void {
+    ipcRenderer.send(Channel.DM_AUTO_DOWNLOAD_SUBTITLES, value)
+  },
   onProgress(cb: (progress: { id: string, value: number }) => void): void {
     ipcRenderer.on(Channel.DM_PROGRESS, (event, data) => {
       cb(data)

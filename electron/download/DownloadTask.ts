@@ -8,6 +8,7 @@ export class DownloadTask {
   public url: string
   public destination: string
   public output: string | null = null
+  public downloadSubtitles: boolean = false
   private _progress: number = 0
 
   get progress(): number {
@@ -79,6 +80,7 @@ export class DownloadTask {
         this.streamId,
         this.url,
         this.destination,
+        this.downloadSubtitles,
     )
   }
 
@@ -104,7 +106,7 @@ export class DownloadTask {
   }
 
   public stop(): void {
-    if (this.isStopped() || this.isDownloaded()) {
+    if (this.isStopped()) {
       return
     }
 

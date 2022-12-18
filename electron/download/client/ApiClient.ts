@@ -1,5 +1,5 @@
 export interface ApiClient {
-  start(streamId: string, url: string, destination: string): void
+  start(streamId: string, url: string, destination: string, downloadSubtitles: boolean): void
 
   pause(): void
 

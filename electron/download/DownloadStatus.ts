@@ -1,7 +1,7 @@
 export enum DownloadStatus {
+  INITIALIZATION,
   PAUSE,
   DOWNLOAD,
-  WAIT_PROGRESS,
   DOWNLOADED,
   FINISHED,
   STOPPED,

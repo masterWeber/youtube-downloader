@@ -1,30 +1,39 @@
 <script setup lang="ts">
-import {RouterView} from 'vue-router';
-import {useDark} from '@vueuse/core';
-import {useSettingsStore} from './stores/settings';
-import {onMounted, watch} from 'vue';
-import {api} from './api';
+import {RouterView} from 'vue-router'
+import {useDark} from '@vueuse/core'
+import {useSettingsStore} from './stores/settings'
+import {onMounted} from 'vue'
+import {api} from './api'
+import {useMainStore} from './stores/main'
 
-const isDark = useDark()
+useDark()
 const settingsStore = useSettingsStore()
+const mainStore = useMainStore()
 
 onMounted(() => {
   if (settingsStore.showAboutOnStartup) {
     api.showAbout()
   }
+  api.changeMaxActiveDownloads(settingsStore.maxActiveDownloads)
+  api.setAutoDownloadSubtitles(settingsStore.autoDownloadSubtitles)
+
+  if (settingsStore.autoResumeDownloadOnStartup) {
+    mainStore.downloadTasks.forEach((task) => {
+      if (task.isStarted()) {
+        task.start()
+      }
+    })
+  } else {
+    mainStore.downloadTasks.forEach((task) => {
+      if (task.isStarted()) {
+        task.pause()
+      }
+    })
+  }
 })
 
-const setDefaultDownloadDirectory = () => {
-  const result = api.getPath('downloads')
-  watch(result, (path) => {
-    if (path) {
-      settingsStore.downloadDirectory = path ?? ''
-    }
-  })
-}
-
-if (settingsStore.downloadDirectory === '') {
-  setDefaultDownloadDirectory()
+if (settingsStore.destination === '') {
+  settingsStore.setDefaultDownloadDirectory()
 }
 </script>
 

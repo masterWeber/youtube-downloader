@@ -30,6 +30,12 @@
           </template>
         </el-image>
         <div class="video-info-card__description">
+          <el-icon
+              class="video-info-card__closeBtn"
+              @click="emit('close')"
+          >
+            <Close/>
+          </el-icon>
           <h5 class="video-info-card__title">{{ videoTitle }}</h5>
           <p class="video-info-card__item" v-if="videoStreamInfo">Видео: {{ videoStreamInfo }}</p>
           <p class="video-info-card__item" v-if="audioStreamInfo">Аудио: {{ audioStreamInfo }}</p>
@@ -40,14 +46,18 @@
 </template>
 
 <script setup lang="ts">
-import {ElCard, ElCollapseTransition, ElIcon, ElImage,} from 'element-plus'
-import {PictureFilled} from '@element-plus/icons-vue';
-import {VideoInfo} from '../models/VideoInfo';
-import {bit2mb} from '../utils/bit2mb';
-import {computed, ref, watch} from 'vue';
+import {ElCard, ElCollapseTransition, ElIcon, ElImage} from 'element-plus'
+import {PictureFilled, Close} from '@element-plus/icons-vue'
+import {VideoInfo} from '../models/VideoInfo'
+import {bit2mb} from '../utils/bit2mb'
+import {computed, ref, watch} from 'vue'
 
 const props = defineProps<{
   data: VideoInfo | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'close'): void
 }>()
 
 const videoInfo = computed<VideoInfo | null>(() => props.data)
@@ -62,21 +72,21 @@ watch(() => props.data, (value) => {
 const videoTitle = computed(() => videoInfo.value?.title)
 
 const videoStreamInfo = computed<string | null>(() => {
-  const video = videoInfo.value?.streamInfo.video;
+  const video = videoInfo.value?.streamInfo.video
   if (video) {
     return `${video.codec} - ${video.formatNote} (${bit2mb(video.fileSize)} мб)`
   }
 
-  return null;
+  return null
 })
 
 const audioStreamInfo = computed<string | null>(() => {
-  const audio = videoInfo.value?.streamInfo.audio;
+  const audio = videoInfo.value?.streamInfo.audio
   if (audio) {
     return `${audio.codec} - ${Math.round(audio.bitRate)}кбит/с (${bit2mb(audio.fileSize)} мб)`
   }
 
-  return null;
+  return null
 })
 </script>
 
@@ -87,6 +97,11 @@ const audioStreamInfo = computed<string | null>(() => {
 
 .video-info-card-container {
   margin-bottom: 18px;
+}
+
+.video-info-card {
+  position: relative;
+  overflow: hidden;
 }
 
 .video-info-card :deep(.el-card__body) {
@@ -115,6 +130,19 @@ const audioStreamInfo = computed<string | null>(() => {
 
 .video-info-card__placeholder :deep(.el-icon) {
   font-size: 30px;
+}
+
+.video-info-card__closeBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  cursor: pointer;
+  color: var(--el-text-color-secondary);
+  font-size: var(--el-notification-close-font-size);
+}
+
+.video-info-card__closeBtn:hover {
+  color: var(--el-text-color-regular);
 }
 
 .video-info-card__description {

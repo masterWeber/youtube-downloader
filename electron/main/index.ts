@@ -1,15 +1,19 @@
-import {StreamSelector} from './StreamSelector';
-
-process.env.DIST_ELECTRON = join(__dirname, '..')
-process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
-process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST_ELECTRON, '../public')
-
+import {StreamSelector} from './StreamSelector'
 import {app, BrowserWindow, dialog, ipcMain, shell} from 'electron'
 import {release} from 'os'
 import {join} from 'path'
 import youtubeDl from 'youtube-dl-exec'
-import {Info} from './Info';
-import {DownloadOptions} from './DownloadOptions';
+import {Info} from './Info'
+import {DownloadOptions} from './DownloadOptions'
+import {Channel} from '../common/Channel'
+import {DownloadManager} from '../download/DownloadManager'
+import {DownloadTask} from '../download/DownloadTask'
+import {YouTubeApiClient} from '../download/client/YouTubeApiClient'
+import {DownloadTaskId} from '../download/DownloadTaskId'
+
+process.env.DIST_ELECTRON = join(__dirname, '..')
+process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
+process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST_ELECTRON, '../public')
 
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 
@@ -47,7 +51,7 @@ async function createMainWindow() {
     mainWin.loadFile(indexHtml)
   } else {
     mainWin.loadURL(url)
-    mainWin.webContents.openDevTools();
+    mainWin.webContents.openDevTools()
   }
 
   // Make all links open with the browser, not with the application
@@ -83,39 +87,35 @@ app.on('activate', () => {
   }
 })
 
-ipcMain.handle('open-win', (event, arg) => {
-  const childWindow = new BrowserWindow({
-    webPreferences: {
-      preload,
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  })
-
-  if (app.isPackaged) {
-    childWindow.loadFile(indexHtml, {hash: arg})
-  } else {
-    childWindow.loadURL(`${url}#${arg}`)
-    // childWindow.webContents.openDevTools({ mode: "undocked", activate: true })
-  }
-})
-
-ipcMain.handle('open-directory', async () => {
+ipcMain.handle(Channel.DIALOG_OPEN_DIRECTORY, async () => {
   let {canceled, filePaths} = await dialog.showOpenDialog(mainWin, {
-    properties: ['openDirectory']
+    properties: ['openDirectory'],
   })
 
   return {
     canceled,
-    path: filePaths[0] ?? null
-  };
-});
+    path: filePaths[0] ?? null,
+  }
+})
 
-ipcMain.handle('get-path', (event, name) => {
+ipcMain.handle(Channel.APP_VERSION, () => {
+  return app.getVersion()
+})
+
+ipcMain.on(Channel.APP_RELAUNCH, () => {
+  app.relaunch()
+  app.quit()
+})
+
+ipcMain.handle(Channel.SYSTEM_GET_PATH, (event, name) => {
   return app.getPath(name)
-});
+})
 
-ipcMain.handle('get-video-info', async (event, options: DownloadOptions) => {
+ipcMain.on(Channel.SYSTEM_SHOW_ITEM_IN_FOLDER, (event, fullPath) => {
+  shell.showItemInFolder(fullPath)
+})
+
+ipcMain.handle(Channel.STREAM_INFO, async (event, options: DownloadOptions) => {
   const result = await youtubeDl(options.url, {
     dumpSingleJson: true,
     noCheckCertificates: true,
@@ -130,23 +130,61 @@ ipcMain.handle('get-video-info', async (event, options: DownloadOptions) => {
       result.title,
       result.description,
       result.thumbnail,
-      muxedStreamInfo
+      muxedStreamInfo,
   )
-});
+})
 
-ipcMain.on('download-video', async (event, options) => {
-  const process = youtubeDl.exec(options.url, {
-    output: options.downloadDirectory + '/v'
+const downloadManager = new DownloadManager(1)
+downloadManager.onProgress = (progress: number, task: DownloadTask) => {
+  mainWin?.webContents.send(Channel.DM_PROGRESS, {
+    id: task.id.value,
+    value: progress,
   })
-  process.stdout.addListener('data', (chunk) => {
-    mainWin.webContents.send('download-process', chunk.toString())
+}
+
+downloadManager.onFinished = (output: string, task: DownloadTask) => {
+  mainWin?.webContents.send(Channel.DM_FINISHED, {
+    id: task.id.value,
+    output: output,
   })
+}
+
+ipcMain.on(Channel.DM_MAX_ACTIVE_DOWNLOADS, async (event, value: number) => {
+  downloadManager.maxActiveDownloads = value
+})
+
+ipcMain.on(Channel.DM_AUTO_DOWNLOAD_SUBTITLES, async (event, value: boolean) => {
+  downloadManager.autoDownloadSubtitles = value
+})
+
+ipcMain.on(Channel.DM_START, async (event, taskData) => {
+  const task = DownloadTask.create(
+      taskData.id,
+      taskData.streamId,
+      taskData.url,
+      taskData.destination,
+      new YouTubeApiClient(youtubeDl),
+  )
+
+  downloadManager.add(task)
+})
+
+ipcMain.on(Channel.DM_PAUSE, async (event, taskId) => {
+  downloadManager.pause(
+      new DownloadTaskId(taskId),
+  )
+})
+
+ipcMain.on(Channel.DM_STOP, async (event, taskId) => {
+  downloadManager.stop(
+      new DownloadTaskId(taskId),
+  )
 })
 
 let aboutWin: BrowserWindow | null = null
 
 async function createAboutWindows() {
-  if (aboutWin) return;
+  if (aboutWin) return
 
   const modalPath = app.isPackaged
       ? `file://${indexHtml}#about`
@@ -184,4 +222,4 @@ async function createAboutWindows() {
   aboutWin.on('ready-to-show', () => aboutWin.show())
 }
 
-ipcMain.on('show-about', createAboutWindows)
+ipcMain.on(Channel.DIALOG_ABOUT, createAboutWindows)

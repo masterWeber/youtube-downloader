@@ -2,89 +2,7 @@
   <el-container class="common-layout is-vertical">
     <el-main>
       <el-form :model="mainStore" ref="formRef">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-form-item label="Видео">
-              <el-select
-                  v-model="mainStore.preferred.video"
-                  :default-first-option="true"
-              >
-                <el-option
-                    v-for="item in preferredVideoOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="Аудио">
-              <el-select
-                  v-model="mainStore.preferred.audio"
-                  :default-first-option="true">
-                <el-option
-                    v-for="item in preferredAudioOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="Качество">
-              <el-select
-                  v-model="mainStore.maxQuality"
-                  :default-first-option="true"
-              >
-                <el-option
-                    v-for="item in preferredQualityOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-row :gutter="5" justify="end">
-              <el-tooltip
-                  :content="`Включить ${isDark  ? 'светлую' : 'темную' } тему`"
-                  :enterable="false"
-                  :hide-after="0"
-              >
-                <el-button
-                    :icon="isDark ? Dark : Light"
-                    circle
-                    @click="toggleDark()"
-                />
-              </el-tooltip>
-              <el-tooltip
-                  content="О программе"
-                  :enterable="false"
-                  :hide-after="0"
-              >
-                <el-button
-                    :icon="InfoFilled"
-                    circle
-                    @click="showAbout"
-                />
-              </el-tooltip>
-              <el-tooltip
-                  content="Настройки"
-                  :enterable="false"
-                  :hide-after="0"
-              >
-                <el-button
-                    :icon="Setting"
-                    circle
-                    @click="() => $router.push({name: 'settings'})"
-                />
-              </el-tooltip>
-            </el-row>
-          </el-col>
-        </el-row>
+        <ToolBar :loading="loadingVideoInfo"/>
         <el-form-item
             label="URL для скачивания"
             prop="url"
@@ -95,11 +13,21 @@
               message: 'Недопустимый URL',
             }]"
         >
-          <el-input v-model="mainStore.url" spellcheck="false">
-            <template #suffix>
+          <el-input v-model.trim="mainStore.url" spellcheck="false">
+            <template #append>
               <transition name="el-fade-in">
-                <el-icon v-if="loadingVideoInfo">
+                <el-icon
+                    v-if="loadingVideoInfo"
+                    style="position: absolute"
+                >
                   <Loading class="video-info-loading-spinner"/>
+                </el-icon>
+                <el-icon
+                    v-else
+                    style="cursor: pointer; position: absolute"
+                    @click="urlInputHandler(mainStore.url)"
+                >
+                  <Search/>
                 </el-icon>
               </transition>
             </template>
@@ -110,15 +38,7 @@
               type="primary"
               style="margin-left: auto;"
               :icon="Download"
-              @click="() => api.downloadVideo({
-              url: mainStore.url,
-              preferred: {
-                video: mainStore.preferred.video,
-                audio: mainStore.preferred.audio,
-              },
-              maxQuality: mainStore.maxQuality,
-              output: settingsStore.downloadDirectory
-            })"
+              @click="addTask(mainStore.videoInfo)"
               :disabled="invalidYoutubeUrl"
           >
             Загрузить
@@ -126,57 +46,87 @@
         </el-form-item>
       </el-form>
 
-      <VideoInfoCard :data="mainStore.videoInfo"/>
+      <VideoInfoCard
+          :data="mainStore.videoInfo"
+          @close="mainStore.videoInfo = null"
+      />
 
-      <el-collapse-transition>
-        <el-table :data="tableData" :show-header="false" scrollbar-always-on v-if="tableData.length > 0">
-          <el-table-column prop="title" :min-width="60"/>
+      <transition name="el-fade-in">
+        <el-table
+            ref="tableRef"
+            :data="Array.from(downloadTasks.values())"
+            :show-header="false"
+            highlight-current-row
+            scrollbar-always-on
+            @current-change="handleCurrentChange"
+            @cell-click="handleCellClick"
+            v-if="downloadTasks.size > 0"
+        >
+          <el-table-column :min-width="50">
+            <template #default="{row: task}">
+              <ScrollableString :value="getTaskTitle(task)"/>
+            </template>
+          </el-table-column>
           <el-table-column :min-width="20" align="center">
-            <template #default="scope">
+            <template #default="{row: task}">
               <transition name="el-fade-in">
                 <el-progress
-                    v-show="scope.row.status !== DownloadStatus.STOPPED && scope.row.status !== DownloadStatus.DOWNLOADED"
-                    :text-inside="true"
-                    :stroke-width="26"
-                    :format="format"
-                    :percentage="scope.row.progress"
-                    :status="scope.row.status === DownloadStatus.PAUSE ? 'warning' : ''"
+                    v-if="task.id && !task.isStopped()"
+                    :stroke-width="8"
+                    :format="task.isWaitProgress() ? () => format(task.progress) : format"
+                    :percentage="task.isWaitProgress() ? 25 : task.progress"
+                    :duration="1"
+                    :indeterminate="task.isWaitProgress()"
+                    :color="task.isDownload() || task.isDownloaded() || task.isFinished() ? colors : '#909399'"
                 />
               </transition>
             </template>
           </el-table-column>
-          <el-table-column :min-width="20" align="right">
-            <template #default="scope">
-              <el-button-group v-if="scope.row.status !== DownloadStatus.DOWNLOADED">
+          <el-table-column :width="130" align="right">
+            <template #default="{row: task}">
+              <el-button-group v-if="task.id && !task.isFinished()">
                 <el-button
-                    :icon="scope.row.status !== DownloadStatus.DOWNLOAD ? PlayArrowFilled : PauseFilled"
+                    :icon="task.isStarted() ? PauseFilled : PlayArrowFilled"
                     @click="() => {
-                    if (scope.row.status !== DownloadStatus.DOWNLOAD) {
-                      startDownload(scope.row)
-                    } else {
-                      pauseDownload(scope.row)
-                    }
-                  }"
-                    plain round
+                      if (task.isStarted()) {
+                        task.pause()
+                      } else {
+                        task.start()
+                      }
+                    }"
+                    plain
+                    round
+                    :circle="task.isStopped()"
                 >
                 </el-button>
                 <el-button
+                    v-if="!task.isStopped()"
                     type="danger"
                     :icon="StopFilled"
-                    @click="stop(scope.row)"
+                    @click="task.stop()"
                     plain round/>
               </el-button-group>
-              <el-icon
-                  v-else
-                  :size="24"
-                  color="var(--el-color-success)"
-              >
-                <SuccessFilled/>
-              </el-icon>
+              <el-row v-else justify="end">
+                <transition name="el-fade-in" appear>
+                  <div>
+                    <el-tooltip
+                        content="Открыть папку назначения"
+                        :enterable="false"
+                        :hide-after="0"
+                    >
+                      <el-button
+                          @click="openDestination(task)"
+                          :icon="Folder"
+                          circle plain
+                      />
+                    </el-tooltip>
+                  </div>
+                </transition>
+              </el-row>
             </template>
           </el-table-column>
         </el-table>
-      </el-collapse-transition>
+      </transition>
     </el-main>
   </el-container>
 </template>
@@ -185,8 +135,6 @@
 import {
   ElButton,
   ElButtonGroup,
-  ElCol,
-  ElCollapseTransition,
   ElContainer,
   ElForm,
   ElFormItem,
@@ -194,42 +142,111 @@ import {
   ElInput,
   ElMain,
   ElMessage,
-  ElOption,
+  ElMessageBox,
   ElProgress,
-  ElRow,
-  ElSelect,
   ElTable,
-  ElTooltip,
-  FormInstance
-} from 'element-plus';
-import {reactive, ref, watch} from 'vue'
-import {Download, InfoFilled, Loading, Setting, SuccessFilled} from '@element-plus/icons-vue';
-import {useDark, useDebounceFn, useToggle} from '@vueuse/core';
-import Dark from '../components/icons/Dark.vue';
-import Light from '../components/icons/Light.vue';
-import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue';
-import StopFilled from '../components/icons/StopFilled.vue';
-import PauseFilled from '../components/icons/PauseFilled.vue';
-import {api} from '../api';
-import {useIpcRenderer} from '@vueuse/electron';
-import {useSettingsStore} from '../stores/settings';
-import {DownloadStatus} from '../models/DownloadStatus';
-import VideoInfoCard from '../components/VideoInfoCard.vue';
-import {useMainStore} from '../stores/main';
-import {VideoOption} from '../models/VideoOption';
-import {AudioOption} from '../models/AudioOption';
-import {QualityOption} from '../models/QualityOption';
+  FormInstance,
+} from 'element-plus'
+import {markRaw, ref, watch} from 'vue'
+import {DocumentDelete, Download, Folder, Loading, Search} from '@element-plus/icons-vue'
+import {useDebounceFn} from '@vueuse/core'
+import PlayArrowFilled from '../components/icons/PlayArrowFilled.vue'
+import PauseFilled from '../components/icons/PauseFilled.vue'
+import {api} from '../api'
+import VideoInfoCard from '../components/VideoInfoCard.vue'
+import {useMainStore} from '../stores/main'
+import ToolBar from '../components/ToolBar.vue'
+import {Task} from '../models/Task'
+import {VideoInfo} from '../models/VideoInfo'
+import StopFilled from '../components/icons/StopFilled.vue'
+import ScrollableString from '../components/ScrollableString.vue'
+import {useSettingsStore} from '../stores/settings'
+import {DownloadStatus} from '../models/DownloadStatus'
 
-const mainStore = useMainStore();
+const mainStore = useMainStore()
+const settingsStore = useSettingsStore()
 
 const formRef = ref<FormInstance>()
+const tableRef = ref<InstanceType<typeof ElTable>>()
 
 const loadingVideoInfo = ref<boolean>(false)
-const invalidYoutubeUrl = ref<boolean>(true)
+const invalidYoutubeUrl = ref<boolean>(!mainStore.videoInfo)
+
+const selectedTask = ref<Task | null>(null)
+
+const selectTask = (task: Task | null) => {
+  selectedTask.value = task
+}
+
+const showVideoInfo = (task: Task | null) => {
+  if (task) {
+    mainStore.videoInfo = task.videoInfo
+  }
+}
+
+const handleCurrentChange = (task: Task | null) => {
+  selectTask(task)
+}
+
+const handleCellClick = (task: Task | null, cell: any) => {
+  if (cell.getColumnIndex() === 0) {
+    selectTask(task)
+    showVideoInfo(task)
+  }
+}
+
+const openDestination = (task: Task) => {
+  api.showItemInFolder(task.output as string)
+}
+
+document.addEventListener('keyup', (event) => {
+  const task = selectedTask.value
+  if (event.key === 'Delete' && task) {
+    showDeleteDialog(task as Task)
+  }
+})
+
+const showDeleteDialog = (task: Task): void => {
+  const taskStatus = task.status
+
+  if (task.isStarted()) {
+    task.pause()
+  }
+
+  ElMessageBox.confirm(
+      `Вы действительно хотите удалить "${getTaskTitle(task)}" ?`,
+      {
+        confirmButtonText: 'Удалить',
+        confirmButtonClass: 'el-button--danger',
+        cancelButtonText: 'Отменить',
+        type: 'warning',
+        icon: markRaw(DocumentDelete),
+      },
+  ).then(() => {
+    if (!task.isStopped() && !task.isFinished()) {
+      task.stop()
+    }
+    downloadTasks.delete(task.id)
+
+    tableRef.value?.setCurrentRow(null)
+    selectedTask.value = null
+  }).catch((reason) => {
+    console.warn(reason)
+    if (taskStatus === DownloadStatus.DOWNLOAD) {
+      task.start()
+    }
+  })
+}
+
+const colors = [
+  {color: '#1989fa', percentage: 50},
+  {color: '#6f7ad3', percentage: 70},
+  {color: '#5cb87a', percentage: 90},
+]
 
 const urlInputHandler = async (url: string) => {
   if (!formRef.value) return
-  const formEl = formRef.value;
+  const formEl = formRef.value
 
   try {
     invalidYoutubeUrl.value = true
@@ -238,7 +255,7 @@ const urlInputHandler = async (url: string) => {
     return
   }
 
-  if (url.trim().length === 0) return
+  if (url.length === 0) return
 
   mainStore.videoInfo = null
   loadingVideoInfo.value = true
@@ -256,18 +273,16 @@ const urlInputHandler = async (url: string) => {
         loadingVideoInfo.value = false
         invalidYoutubeUrl.value = true
 
-        console.log(reason.message)
-
-        ElMessage({
+        ElMessage.error({
           message: 'Не удалось найти видео, проверьте URL.',
-          type: 'error',
+          grouping: true,
         })
       })
   watch(result, (result) => {
     if (null !== result) {
       invalidYoutubeUrl.value = false
       loadingVideoInfo.value = false
-      mainStore.videoInfo = result;
+      mainStore.videoInfo = result
     }
   })
 }
@@ -279,132 +294,61 @@ watch(() => [mainStore.preferred, mainStore.maxQuality], () => {
     urlInputHandler(mainStore.url)
 }, {deep: true})
 
-const isDark = useDark()
-const toggleDark = useToggle(isDark)
-const showAbout = () => api.showAbout()
-const settingsStore = useSettingsStore()
+const downloadTasks = mainStore.downloadTasks
 
-const preferredVideoOptions = [
-  {
-    label: 'Лучшее',
-    value: VideoOption.BEST,
-  },
-  {
-    label: 'MP4',
-    value: VideoOption.MP4,
-  },
-  {
-    label: 'WebM',
-    value: VideoOption.WEBM,
-  },
-];
-const preferredAudioOptions = [
-  {
-    label: 'Лучшее',
-    value: AudioOption.BEST,
-  },
-  {
-    label: 'MP4',
-    value: AudioOption.MP4,
-  },
-  {
-    label: 'WebM',
-    value: AudioOption.WEBM,
-  },
-];
-const preferredQualityOptions = [
-  {
-    label: 'Макс.',
-    value: QualityOption.MAX,
-  },
-  {
-    label: '4320p',
-    value: QualityOption['8K'],
-  },
-  {
-    label: '2160p',
-    value: QualityOption.UHD,
-  },
-  {
-    label: '1440p',
-    value: QualityOption.QHD,
-  },
-  {
-    label: '1080p',
-    value: QualityOption.FHD,
-  },
-  {
-    label: '720p',
-    value: QualityOption.HD,
-  },
-  {
-    label: '480p',
-    value: QualityOption['480P'],
-  },
-  {
-    label: '360p',
-    value: QualityOption['360P'],
-  },
-  {
-    label: '240p',
-    value: QualityOption['240P'],
-  },
-  {
-    label: '144p',
-    value: QualityOption['144P'],
-  },
-];
-
-interface Row {
-  title: string;
-  progress: number;
-  status: DownloadStatus;
-}
-
-const tableData = reactive<Row[]>([
-  {
-    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
-    progress: 26,
-    status: DownloadStatus.PAUSE,
-  },
-  {
-    title: 'Как фильмы 2000–2010-х отражали реальность и что ждет наш кинематограф',
-    progress: 99,
-    status: DownloadStatus.PAUSE,
-  },
-]);
-
-function stop(row: Row) {
-  row.status = DownloadStatus.STOPPED;
-  row.progress = 0
-}
-
-function startDownload(row: Row) {
-  row.status = DownloadStatus.DOWNLOAD;
-
-  watch(
-      () => row.progress,
-      value => {
-        if (value >= 100) row.status = DownloadStatus.DOWNLOADED
-      }
-  )
-}
-
-const ipcRenderer = useIpcRenderer()
-ipcRenderer.on('download-process', (event, line) => {
-  console.log(line)
+watch(downloadTasks, (downloadTasks) => {
+  if (downloadTasks.size === 0 && invalidYoutubeUrl.value) {
+    mainStore.videoInfo = null
+  }
 })
 
-const format = (percentage: number): string => `${percentage.toFixed(1)}%`
+function addTask(info: VideoInfo | null): void {
+  if (info === null) return
+  const task = Task.create(mainStore.url, info, settingsStore.destination)
 
-function pauseDownload(row: Row): void {
-  row.status = DownloadStatus.PAUSE;
+  if (downloadTasks.has(task.id)) {
+    ElMessage.warning({
+      message: 'Уже есть в очереди.',
+      grouping: true,
+    })
+    return
+  }
+
+  downloadTasks.set(task.id, task)
+  task.start()
 }
+
+api.onProgress((progress) => {
+  const task = downloadTasks.get(progress.id)
+  if (task) {
+    task.progress = progress.value
+  }
+})
+
+api.onFinished((data) => {
+  const task = downloadTasks.get(data.id)
+  if (task) {
+    task.finish(data.output)
+  }
+})
+
+const getTaskTitle = (task: Task): string => {
+  let title = task.videoInfo.title
+
+  if (task.videoInfo.streamInfo.video) {
+    title += ` [${task.videoInfo.streamInfo.video.formatNote}]`
+  }
+
+  title += ` [${task.streamId}]`
+
+  return title
+}
+
+const format = (percentage: number): string => `${percentage.toFixed(1)}%`
 </script>
 
 <style scoped>
 .video-info-loading-spinner {
-  color: var(--el-color-primary);
   animation-name: rotating;
   animation-duration: 1s;
   animation-iteration-count: infinite;
